@@ -277,15 +277,21 @@ configure_key() {
 }
 
 MISSING_KEYS=0
+BRAVE_CONFIGURED=false
+GITHUB_CONFIGURED=false
 
 for key in "${!REQUIRED_KEYS[@]}"; do
   if ! configure_key "$key" "${REQUIRED_KEYS[$key]}"; then
-    ((MISSING_KEYS++))
+    MISSING_KEYS=$((MISSING_KEYS + 1))
+  else
+    BRAVE_CONFIGURED=true
   fi
 done
 
 for key in "${!OPTIONAL_KEYS[@]}"; do
-  configure_key "$key" "${OPTIONAL_KEYS[$key]}" || true
+  if configure_key "$key" "${OPTIONAL_KEYS[$key]}"; then
+    GITHUB_CONFIGURED=true
+  fi
 done
 echo ""
 
@@ -301,18 +307,31 @@ if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
   yellow "  → Backup: opencode.jsonc.bak"
 fi
 
-# Copiar template e substituir placeholders
+# Copiar template
 cp "${REPO_DIR}/opencode.jsonc.example" "${CONFIG_DIR}/opencode.jsonc"
 
-if [[ -n "${BRAVE_API_KEY:-}" ]]; then
+# Substituir placeholders e desabilitar MCPs sem chave
+if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
   sed -i "s/{YOUR_BRAVE_API_KEY}/${BRAVE_API_KEY}/g" "${CONFIG_DIR}/opencode.jsonc"
+  green "  ✓ brave-search: habilitado"
+else
+  # Desabilitar brave-search (linha 8 do template)
+  sed -i '/brave-search/,/enabled/{
+    /"enabled": true/s/"enabled": true/"enabled": false/
+  }' "${CONFIG_DIR}/opencode.jsonc"
+  yellow "  ⚠ brave-search: desabilitado (chave ausente)"
 fi
 
-if [[ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
   sed -i "s/{YOUR_GITHUB_TOKEN}/${GITHUB_PERSONAL_ACCESS_TOKEN}/g" "${CONFIG_DIR}/opencode.jsonc"
+  green "  ✓ github: habilitado"
+else
+  # Desabilitar github (proximo "enabled": true apos github)
+  sed -i '/github/,/enabled/{
+    /"enabled": true/s/"enabled": true/"enabled": false/
+  }' "${CONFIG_DIR}/opencode.jsonc"
+  yellow "  ⚠ github: desabilitado (chave ausente)"
 fi
-
-green "  ✓ opencode.jsonc gerado"
 
 # Gerar .env
 blue "  Gerando .env..."
@@ -339,11 +358,11 @@ if [[ -f "${CONFIG_DIR}/opencode.json" ]]; then
     green "  ✓ opencode.json: valido"
   else
     red "  ✗ opencode.json: JSON invalido"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
   fi
 else
   red "  ✗ opencode.json: nao encontrado"
-  ((ERRORS++))
+  ERRORS=$((ERRORS + 1))
 fi
 
 # Verificar opencode.jsonc
@@ -352,11 +371,11 @@ if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
     green "  ✓ opencode.jsonc: valido"
   else
     red "  ✗ opencode.jsonc: JSON invalido"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
   fi
 else
   red "  ✗ opencode.jsonc: nao encontrado"
-  ((ERRORS++))
+  ERRORS=$((ERRORS + 1))
 fi
 
 # Verificar chaves
@@ -364,8 +383,7 @@ for key in "${!REQUIRED_KEYS[@]}"; do
   if [[ -n "${!key:-}" ]]; then
     green "  ✓ ${key}: configurada"
   else
-    red "  ✗ ${key}: AUSENTE"
-    ((ERRORS++))
+    yellow "  ⚠ ${key}: ausente (brave-search desabilitado)"
   fi
 done
 
@@ -373,9 +391,25 @@ for key in "${!OPTIONAL_KEYS[@]}"; do
   if [[ -n "${!key:-}" ]]; then
     green "  ✓ ${key}: configurada"
   else
-    yellow "  ⚠ ${key}: nao configurada (opcional)"
+    yellow "  ⚠ ${key}: ausente (github desabilitado)"
   fi
 done
+
+# Verificar MCPs
+echo ""
+blue "  Status dos MCPs:"
+if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
+  green "    ✓ brave-search: ativo"
+else
+  yellow "    ⚠ brave-search: inativo (execute setup.sh para configurar)"
+fi
+if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
+  green "    ✓ github: ativo"
+else
+  yellow "    ⚠ github: inativo (execute setup.sh para configurar)"
+fi
+green "    ✓ git: ativo"
+green "    ✓ memory: ativo"
 
 # Verificar agentes
 AGENT_COUNT=$(ls -1 "${CONFIG_DIR}/.opencode/agents/"*.md 2>/dev/null | wc -l)
@@ -383,7 +417,7 @@ if [[ "$AGENT_COUNT" -gt 0 ]]; then
   green "  ✓ ${AGENT_COUNT} agente(s) instalado(s)"
 else
   red "  ✗ Nenhum agente encontrado"
-  ((ERRORS++))
+  ERRORS=$((ERRORS + 1))
 fi
 
 echo ""
@@ -398,6 +432,12 @@ if [[ $ERRORS -eq 0 ]]; then
   echo ""
   echo "  Arquivos instalados em: ${CONFIG_DIR}/"
   echo ""
+  if [[ "$BRAVE_CONFIGURED" == "false" || "$GITHUB_CONFIGURED" == "false" ]]; then
+    echo "  MCPs parciais (chaves ausentes):"
+    [[ "$BRAVE_CONFIGURED" == "false" ]] && echo "    - brave-search: Execute setup.sh para adicionar a chave"
+    [[ "$GITHUB_CONFIGURED" == "false" ]] && echo "    - github: Execute setup.sh para adicionar o token"
+    echo ""
+  fi
   echo "  Proximos passos:"
   echo "    1. Reinicie o OpenCode"
   echo "    2. Teste: @qa-engineer ola"
