@@ -5,7 +5,7 @@
       "type": "local",
       "command": ["npx", "-y", "@brave/brave-search-mcp-server"],
       "enabled": true,
-      "env": {
+      "environment": {
         "BRAVE_API_KEY": "{YOUR_BRAVE_API_KEY}"
       }
     },
@@ -13,7 +13,7 @@
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
       "enabled": true,
-      "env": {
+      "environment": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{YOUR_GITHUB_TOKEN}"
       }
     },
