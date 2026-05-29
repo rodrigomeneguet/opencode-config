@@ -5,16 +5,16 @@
       "type": "local",
       "command": ["npx", "-y", "@brave/brave-search-mcp-server"],
       "enabled": true,
-      "environment": {
-        "BRAVE_API_KEY": "{INSIRA SUA API KEY AQUI}"
+      "env": {
+        "BRAVE_API_KEY": "{YOUR_BRAVE_API_KEY}"
       }
     },
     "github": {
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
       "enabled": true,
-      "environment": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "{INSIRA SUA API KEY AQUI}"
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{YOUR_GITHUB_TOKEN}"
       }
     },
     "git": {

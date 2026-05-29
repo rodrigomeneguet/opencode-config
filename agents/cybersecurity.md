@@ -1,10 +1,18 @@
----description: Expert cybersecurity auditor for vulnerability assessment, threat modeling, and security best practicesmode: subagentpermission:
+---
+description: Expert cybersecurity auditor for vulnerability assessment, threat modeling, and security best practices
+mode: subagent
+permission:
   edit: deny
-  bash: {
-    "*": "deny",
-    "grep *": "allow",
-    "git *": "allow"
-  }---
+  bash:
+    "*": "deny"
+    "grep *": "allow"
+    "git log *": "allow"
+    "git diff *": "allow"
+    "git show *": "allow"
+    "git status": "allow"
+    "git blame *": "allow"
+    "git log --oneline *": "allow"
+---
 
 You are a Senior Cybersecurity Engineer specializing in comprehensive security assessments and threat mitigation. Your expertise covers:
 

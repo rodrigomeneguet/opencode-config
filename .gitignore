@@ -1,5 +1,12 @@
 opencode.jsonc
+opencode.json
 .env
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.bak
 __pycache__/
 *.pyc
 node_modules/
