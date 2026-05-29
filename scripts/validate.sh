@@ -48,7 +48,7 @@ fi
 
 # ─── 3. Validar frontmatter dos agentes ───
 blue "[3/7] Validando frontmatter dos agentes..."
-for agent_file in "${REPO_DIR}"/agents/*.md; do
+for agent_file in "${REPO_DIR}"/.opencode/agents/*.md; do
   filename="$(basename "$agent_file")"
   # Verifica se a linha 1 e apenas "---"
   line1="$(head -1 "$agent_file")"

@@ -34,11 +34,13 @@ Template de configuracao para o [OpenCode](https://opencode.ai) — o agente de 
    cd opencode-config
    ```
 
-2. Copie a configuracao e agentes para o OpenCode:
+2. Execute o instalador:
    ```bash
-   mkdir -p ~/.config/opencode
-   cp opencode.json ~/.config/opencode/
-   cp -r agents/ ~/.config/opencode/
+   bash setup.sh
+   ```
+   Ou, para instalacao global com symlinks (atualiza com git pull):
+   ```bash
+   bash setup.sh --symlink
    ```
 
 3. Copie o template de configuracao MCP:
@@ -61,15 +63,20 @@ Template de configuracao para o [OpenCode](https://opencode.ai) — o agente de 
 ├── opencode.json              ← Configuracao de provedor e modelos
 ├── opencode.jsonc             ← Servidores MCP (copie do .example + suas chaves)
 ├── .env                       ← (opcional) variaveis de ambiente
-└── agents/                    ← Agentes customizados (invocaveis com @)
-    ├── qa-engineer.md         → Estrategia e automacao de testes
-    ├── cybersecurity.md       → Avaliacao de vulnerabilidades e OWASP
-    ├── devops.md              → CI/CD, containers, IaC
-    ├── backend.md             → Design de APIs, banco de dados, microservicos
-    └── frontend.md            → React/Vue, CSS, acessibilidade, performance
+└── .opencode/
+    └── agents/                ← Agentes customizados (invocaveis com @)
+        ├── qa-engineer.md     → Estrategia e automacao de testes
+        ├── cybersecurity.md   → Avaliacao de vulnerabilidades e OWASP
+        ├── devops.md          → CI/CD, containers, IaC
+        ├── backend.md         → Design de APIs, banco de dados, microservicos
+        └── frontend.md        → React/Vue, CSS, acessibilidade, performance
 ```
 
-> **Importante:** `opencode.json` configura provedores e modelos. `opencode.jsonc` configura servidores MCP. Ambos sao carregados pelo OpenCode.
+> **Importante:** `opencode.json` configura provedores e modelos. `opencode.jsonc` configura servidores MCP. Agentes ficam em `.opencode/agents/`. Todos sao carregados pelo OpenCode.
+
+### Uso como projeto
+
+Ao clonar e rodar opencode deste diretorio, os agentes ja estao disponiveis em `.opencode/agents/` (projeto-level). Nenhuma copia global necessaria.
 
 ---
 
@@ -141,7 +148,7 @@ cd opencode-config && git pull origin master
 
 # Recopie os arquivos (preserva seu opencode.jsonc com chaves reais)
 cp opencode.json ~/.config/opencode/
-cp -r agents/ ~/.config/opencode/
+cp -r .opencode/ ~/.config/opencode/
 ```
 
 > Seus arquivos `opencode.jsonc` e `.env` estao protegidos pelo `.gitignore` e nao serao sobrescritos. Agentes podem sobrescrever customizacoes — considere usar branches para modifications locais.
@@ -150,7 +157,7 @@ cp -r agents/ ~/.config/opencode/
 
 ## Adicionando Novos Agentes
 
-Crie um arquivo markdown em `agents/`:
+Crie um arquivo markdown em `.opencode/agents/`:
 
 ```markdown
 ---
@@ -183,8 +190,8 @@ Em seguida, reinicie o OpenCode. O estara disponivel via `@nome-do-agente`.
 
 ### Agentes nao aparecem apos copiar os arquivos
 
-- Verifique se o frontmatter dos arquivos em `agents/` esta formatado corretamente (cada campo em uma linha separada)
-- Confirme que copiou todo o diretorio `agents/` para `~/.config/opencode/agents/`
+- Verifique se o frontmatter dos arquivos em `.opencode/agents/` esta formatado corretamente (cada campo em uma linha separada)
+- Confirme que copiou todo o diretorio `.opencode/agents/` para `~/.config/opencode/.opencode/agents/`
 - Reinicie o OpenCode completamente
 
 ### Servidor MCP nao inicia
