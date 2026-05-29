@@ -20,39 +20,35 @@ Template de configuracao para o [OpenCode](https://opencode.ai) — o agente de 
 
 - [Node.js](https://nodejs.org/) 18+ (necessario para `npx`)
 - [OpenCode](https://opencode.ai) instalado
-- Diretorio `~/.config/opencode/` (criado automaticamente na primeira execucao do OpenCode)
-- Conta no [Brave Search API](https://api-dashboard.search.brave.com) (para busca web)
-- [GitHub Personal Access Token](https://github.com/settings/tokens) (para integracao com GitHub)
 
 ---
 
-## Inicio Rapido (~5 minutos)
+## Inicio Rapido
 
-1. Clone este repositorio:
+1. Clone e execute o instalador:
    ```bash
    git clone https://github.com/rodrigomeneguet/opencode-config.git
    cd opencode-config
-   ```
-
-2. Execute o instalador:
-   ```bash
    bash setup.sh
    ```
-   Ou, para instalacao global com symlinks (atualiza com git pull):
-   ```bash
-   bash setup.sh --symlink
-   ```
 
-3. Copie o template de configuracao MCP:
-   ```bash
-   cp opencode.jsonc.example ~/.config/opencode/opencode.jsonc
-   ```
+2. O instalador vai:
+   - Detectar configuracao existente e perguntar sobre merge
+   - Solicitar chaves de API ausentes (Brave Search obrigatoria)
+   - Gerar arquivos de configuracao automaticamente
+   - Validar tudo ao final
 
-4. Edite `~/.config/opencode/opencode.jsonc` e substitua os placeholders:
-   - `{YOUR_BRAVE_API_KEY}` → sua chave de API do Brave Search
-   - `{YOUR_GITHUB_TOKEN}` → seu token de acesso pessoal do GitHub
+3. Reinicie o OpenCode. Teste com: `@qa-engineer ola`
 
-5. Reinicie o OpenCode. Verifique com: `@qa-engineer ola`
+### Modos de instalacao
+
+```bash
+bash setup.sh              # Interativo (default) — pergunta tudo
+bash setup.sh --auto       # Automatico — usa .env ou valores existentes
+bash setup.sh --symlink    # Global com symlinks — atualiza com git pull
+bash setup.sh --project    # Projeto-level — copia para .opencode/ no CWD
+bash setup.sh --merge      # Apenas merge — nao sobrescreve nada
+```
 
 ---
 
@@ -61,8 +57,8 @@ Template de configuracao para o [OpenCode](https://opencode.ai) — o agente de 
 ```
 ~/.config/opencode/
 ├── opencode.json              ← Configuracao de provedor e modelos
-├── opencode.jsonc             ← Servidores MCP (copie do .example + suas chaves)
-├── .env                       ← (opcional) variaveis de ambiente
+├── opencode.jsonc             ← Servidores MCP (gerado pelo setup)
+├── .env                       ← Chaves de API (gerado pelo setup)
 └── .opencode/
     └── agents/                ← Agentes customizados (invocaveis com @)
         ├── qa-engineer.md     → Estrategia e automacao de testes
@@ -84,9 +80,9 @@ Ao clonar e rodar opencode deste diretorio, os agentes ja estao disponiveis em `
 
 | Servidor | Pacote | Finalidade | Chaves Necessarias |
 | --- | --- | --- | --- |
-| **Brave Search** | `@brave/brave-search-mcp-server` | Busca web, imagens, videos, noticias | Chave Brave API ([api-dashboard.search.brave.com](https://api-dashboard.search.brave.com)) |
-| **GitHub** | `@modelcontextprotocol/server-github` | Issues, PRs, repos, gestao de arquivos | GitHub PAT ([github.com/settings/tokens](https://github.com/settings/tokens)) |
-| **Git History** | `@cyanheads/git-mcp-server` | Commits locais, diffs, blame (28 ferramentas) | Nenhuma |
+| **Brave Search** | `@brave/brave-search-mcp-server` | Busca web, imagens, videos, noticias | `BRAVE_API_KEY` (obrigatoria) |
+| **GitHub** | `@modelcontextprotocol/server-github` | Issues, PRs, repos, gestao de arquivos | `GITHUB_PERSONAL_ACCESS_TOKEN` (opcional) |
+| **Git History** | `@cyanheads/git-mcp-server` | Commits locais, diffs, blame | Nenhuma |
 | **Memory Graph** | `@modelcontextprotocol/server-memory` | Estado persistente entre sessoes | Nenhuma |
 
 ---
@@ -119,18 +115,28 @@ Os tres executam simultaneamente e retornam relatorios independentes.
 
 ## Obtendo suas Chaves de API
 
-### Brave Search
+### Brave Search (obrigatoria)
 
 1. Acesse [api-dashboard.search.brave.com](https://api-dashboard.search.brave.com)
 2. Faca login ou crie uma conta
 3. Gere uma nova chave de API
-4. Cole em `opencode.jsonc` → `BRAVE_API_KEY`
 
-### GitHub Personal Access Token
+O setup vai pedir a chave automaticamente. voce tambem pode configurar manualmente:
+
+```bash
+# No .env
+BRAVE_API_KEY=sua_chave_aqui
+```
+
+### GitHub Personal Access Token (opcional)
 
 1. Acesse [github.com/settings/tokens](https://github.com/settings/tokens)
 2. Gere um novo token com escopo `repo` (ou `public_repo` apenas para repos publicos)
-3. Cole em `opencode.jsonc` → `GITHUB_PERSONAL_ACCESS_TOKEN`
+
+```bash
+# No .env
+GITHUB_PERSONAL_ACCESS_TOKEN=seu_token_aqui
+```
 
 > **Dica:** Use o escopo minimo necessario. Para muitos casos, `public_repo` e suficiente.
 
@@ -141,17 +147,17 @@ Os tres executam simultaneamente e retornam relatorios independentes.
 Para atualizar sua configuracao deste repositorio:
 
 ```bash
-# Clone ou atualize
-git clone https://github.com/rodrigomeneguet/opencode-config.git
-# ou, se ja clonado:
-cd opencode-config && git pull origin master
-
-# Recopie os arquivos (preserva seu opencode.jsonc com chaves reais)
-cp opencode.json ~/.config/opencode/
-cp -r .opencode/ ~/.config/opencode/
+cd opencode-config
+git pull origin master
+bash setup.sh --merge
 ```
 
-> Seus arquivos `opencode.jsonc` e `.env` estao protegidos pelo `.gitignore` e nao serao sobrescritos. Agentes podem sobrescrever customizacoes — considere usar branches para modifications locais.
+O modo `--merge` vai:
+- Detectar configuracoes existentes
+- Perguntar antes de substituir qualquer coisa
+- Preservar suas chaves de API
+
+> Seus arquivos `opencode.jsonc` e `.env` estao protegidos pelo `.gitignore` e nao serao sobrescritos pelo git pull.
 
 ---
 
@@ -162,7 +168,7 @@ Crie um arquivo markdown em `.opencode/agents/`:
 ```markdown
 ---
 description: Descricao do seu agente aqui
-mode: subagent
+mode: all
 permission:
   edit: allow
   bash:
@@ -178,8 +184,8 @@ Em seguida, reinicie o OpenCode. O estara disponivel via `@nome-do-agente`.
 
 ## Seguranca
 
-- **Nunca faca commit de `opencode.jsonc` com chaves reais** — use o template `.example`
-- O `.gitignore` bloqueia `opencode.jsonc`, `opencode.json` e `.env`
+- **Nunca faca commit de `.env` ou `opencode.jsonc`** — estao no `.gitignore`
+- O `.gitignore` bloqueia: `opencode.jsonc`, `.env`, `opencode.json`
 - Rotacione suas chaves de API periodicamente
 - GitHub PAT: use os escopos minimos necessarios para seu fluxo de trabalho
 - O vLLM endpoint esta configurado para uso interno — nao compartilhe a URL publicamente
@@ -188,29 +194,39 @@ Em seguida, reinicie o OpenCode. O estara disponivel via `@nome-do-agente`.
 
 ## Solucao de Problemas
 
-### Agentes nao aparecem apos copiar os arquivos
+### Agentes nao aparecem
 
 - Verifique se o frontmatter dos arquivos em `.opencode/agents/` esta formatado corretamente (cada campo em uma linha separada)
-- Confirme que copiou todo o diretorio `.opencode/agents/` para `~/.config/opencode/.opencode/agents/`
 - Reinicie o OpenCode completamente
 
 ### Servidor MCP nao inicia
 
 - Verifique se o Node.js 18+ esta instalado: `node --version`
 - Teste manualmente: `npx -y @brave/brave-search-mcp-server --help`
-- Verifique se as chaves de API estao corretas em `opencode.jsonc`
+- Verifique se as chaves estao corretas no `.env`
 
 ### Erro de conexao com o modelo
 
 - Confirme que o endpoint vLLM esta acessivel: `curl https://api-vllm.regionaltelhas.com.br/v1/models`
 - Verifique sua conexao com a internet
-- Confirme que o modelo esta configurado corretamente em `opencode.json`
 
 ### Configuracao nao e detectada
 
-- Certifique-se de que os arquivos estao em `~/.config/opencode/` (nao em outro diretorio)
-- Verifique se nao ha erros de formatacao JSON nos arquivos de configuracao
+- Certifique-se de que os arquivos estao em `~/.config/opencode/`
 - Reinicie o OpenCode apos qualquer alteracao
+
+### Reconfigurar chaves
+
+Execute novamente o setup:
+```bash
+cd opencode-config
+bash setup.sh
+```
+
+Ou edite diretamente:
+```bash
+nano ~/.config/opencode/.env
+```
 
 ---
 

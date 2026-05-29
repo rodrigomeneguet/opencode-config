@@ -19,7 +19,7 @@ echo "============================================="
 echo ""
 
 # ─── 1. Validar JSON do opencode.json ───
-blue "[1/7] Validando opencode.json..."
+blue "[1/8] Validando opencode.json..."
 if command -v node &>/dev/null; then
   if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8'))" 2>/dev/null; then
     green "  ✓ opencode.json: JSON valido"
@@ -33,7 +33,7 @@ else
 fi
 
 # ─── 2. Validar JSON do opencode.jsonc.example ───
-blue "[2/7] Validando opencode.jsonc.example..."
+blue "[2/8] Validando opencode.jsonc.example..."
 if command -v node &>/dev/null; then
   if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.jsonc.example','utf8'))" 2>/dev/null; then
     green "  ✓ opencode.jsonc.example: JSON valido"
@@ -47,13 +47,11 @@ else
 fi
 
 # ─── 3. Validar frontmatter dos agentes ───
-blue "[3/7] Validando frontmatter dos agentes..."
+blue "[3/8] Validando frontmatter dos agentes..."
 for agent_file in "${REPO_DIR}"/.opencode/agents/*.md; do
   filename="$(basename "$agent_file")"
-  # Verifica se a linha 1 e apenas "---"
   line1="$(head -1 "$agent_file")"
   if [[ "$line1" == "---" ]]; then
-    # Verifica se tem description e mode
     if grep -q "^description:" "$agent_file" && grep -q "^mode:" "$agent_file"; then
       green "  ✓ ${filename}: frontmatter valido"
     else
@@ -67,7 +65,7 @@ for agent_file in "${REPO_DIR}"/.opencode/agents/*.md; do
 done
 
 # ─── 4. Verificar .gitignore ───
-blue "[4/7] Verificando .gitignore..."
+blue "[4/8] Verificando .gitignore..."
 GITIGNORE="${REPO_DIR}/.gitignore"
 for entry in "opencode.jsonc" "opencode.json" ".env"; do
   if grep -q "^${entry}$" "$GITIGNORE"; then
@@ -79,7 +77,7 @@ for entry in "opencode.jsonc" "opencode.json" ".env"; do
 done
 
 # ─── 5. Verificar MCP packages no npm ───
-blue "[5/7] Verificando disponibilidade dos pacotes MCP no npm..."
+blue "[5/8] Verificando disponibilidade dos pacotes MCP no npm..."
 MCP_PACKAGES=(
   "@brave/brave-search-mcp-server"
   "@modelcontextprotocol/server-github"
@@ -102,8 +100,45 @@ for pkg in "${MCP_PACKAGES[@]}"; do
   fi
 done
 
-# ─── 6. Testar endpoint vLLM ───
-blue "[6/7] Testando conectividade do endpoint vLLM..."
+# ─── 6. Validar setup.sh ───
+blue "[6/8] Validando setup.sh..."
+SETUP="${REPO_DIR}/setup.sh"
+if [[ -f "$SETUP" ]]; then
+  if bash -n "$SETUP" 2>/dev/null; then
+    green "  ✓ setup.sh: sintaxe valida"
+  else
+    red "  ✗ setup.sh: erro de sintaxe"
+    ((ERRORS++))
+  fi
+  if [[ -x "$SETUP" ]]; then
+    green "  ✓ setup.sh: executavel"
+  else
+    yellow "  ⚠ setup.sh: nao e executavel (chmod +x)"
+    ((WARNINGS++))
+  fi
+else
+  red "  ✗ setup.sh: nao encontrado"
+  ((ERRORS++))
+fi
+
+# ─── 7. Verificar .env.example ───
+blue "[7/8] Verificando .env.example..."
+if [[ -f "${REPO_DIR}/.env.example" ]]; then
+  green "  ✓ .env.example existe"
+  # Verificar se tem as variaveis obrigatorias
+  if grep -q "^BRAVE_API_KEY=" "${REPO_DIR}/.env.example"; then
+    green "  ✓ BRAVE_API_KEY documentada"
+  else
+    red "  ✗ BRAVE_API_KEY nao documentada no .env.example"
+    ((ERRORS++))
+  fi
+else
+  red "  ✗ .env.example: nao encontrado"
+  ((ERRORS++))
+fi
+
+# ─── 8. Testar endpoint vLLM ───
+blue "[8/8] Testando conectividade do endpoint vLLM..."
 VLLM_URL="$(node -e "console.log(JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8')).provider['rt-vllm'].options.baseURL)" 2>/dev/null || echo "")"
 if [[ -n "$VLLM_URL" ]]; then
   if curl -sf --max-time 5 "${VLLM_URL}/models" >/dev/null 2>&1; then
@@ -115,26 +150,6 @@ if [[ -n "$VLLM_URL" ]]; then
 else
   yellow "  ⚠ Nao foi possivel extrair URL do vLLM"
   ((WARNINGS++))
-fi
-
-# ─── 7. Verificar links do README ───
-blue "[7/7] Verificando links do README..."
-README="${REPO_DIR}/README.md"
-if [[ -f "$README" ]]; then
-  LINKS=(
-    "https://opencode.ai"
-    "https://api-dashboard.search.brave.com"
-    "https://github.com/settings/tokens"
-    "https://github.com/rodrigomeneguet/opencode-config"
-  )
-  for link in "${LINKS[@]}"; do
-    if curl -sf --max-time 5 -o /dev/null "$link" 2>/dev/null; then
-      green "  ✓ ${link}"
-    else
-      yellow "  ⚠ ${link} (inacessivel ou timeout)"
-      ((WARNINGS++))
-    fi
-  done
 fi
 
 # ─── Resumo ───
