@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@brave/brave-search-mcp-server"],
+      "enabled": true,
+      "environment": {
+        "BRAVE_API_KEY": "{INSIRA SUA API KEY AQUI}"
+      }
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true,
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{INSIRA SUA API KEY AQUI}"
+      }
+    },
+    "git": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/git-mcp-server"],
+      "enabled": true
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
+    }
+  }
+}

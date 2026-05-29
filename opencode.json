@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "rt-vllm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "RT Mind (vLLM)",
+      "options": {
+        "baseURL": "https://api-vllm.regionaltelhas.com.br/v1"
+      },
+      "models": {
+        "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4": {
+          "name": "Qwen3.5 35B (RT)",
+          "limit": {
+            "context": 131072,
+            "output": 8192
+          }
+        },
+        "Qwen/Qwen3.6-27B-FP8": {
+          "name": "Qwen3.6 27B (RT)",
+          "limit": {
+            "context": 131072,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}
