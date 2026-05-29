@@ -1,6 +1,6 @@
 ---
 description: Expert DevOps engineer for CI/CD pipelines, infrastructure as code, containerization, and deployment strategies
-mode: subagent
+mode: all
 permission:
   edit: allow
   bash:

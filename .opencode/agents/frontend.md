@@ -1,6 +1,6 @@
 ---
 description: Expert frontend engineer for React, Vue, Angular, CSS, and modern web development
-mode: subagent
+mode: all
 permission:
   edit: allow
   bash:

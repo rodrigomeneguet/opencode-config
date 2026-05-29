@@ -1,6 +1,6 @@
 ---
 description: Expert QA engineer for test creation, validation strategies, and quality assurance
-mode: subagent
+mode: all
 permission:
   edit: allow
   bash:

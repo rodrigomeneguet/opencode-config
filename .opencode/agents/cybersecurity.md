@@ -1,6 +1,6 @@
 ---
 description: Expert cybersecurity auditor for vulnerability assessment, threat modeling, and security best practices
-mode: subagent
+mode: all
 permission:
   edit: deny
   bash:

@@ -1,6 +1,6 @@
 ---
 description: Expert backend engineer for API design, database architecture, microservices, and system design
-mode: subagent
+mode: all
 permission:
   edit: allow
   bash:
