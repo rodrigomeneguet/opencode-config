@@ -1,30 +1,41 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "rt-vllm/Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
-  "small_model": "rt-vllm/Qwen/Qwen3.6-27B-FP8",
-  "provider": {
-    "rt-vllm": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "RT Mind (vLLM)",
-      "options": {
-        "baseURL": "https://api-vllm.regionaltelhas.com.br/v1"
-      },
-      "models": {
-        "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4": {
-          "name": "Qwen3.5 35B (RT)",
-          "limit": {
-            "context": 131072,
-            "output": 8192
-          }
-        },
-        "Qwen/Qwen3.6-27B-FP8": {
-          "name": "Qwen3.6 27B (RT)",
-          "limit": {
-            "context": 131072,
-            "output": 8192
-          }
-        }
+  "model": "openai/gpt-5.6-luna",
+  "small_model": "openai/gpt-5.6-luna",
+  "default_agent": "luna-lead",
+  "subagent_depth": 1,
+  "enabled_providers": ["openai", "opencode"],
+  "permission": {
+    "skill": {
+      "*": "allow"
+    }
+  },
+  "mcp": {
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@brave/brave-search-mcp-server"],
+      "enabled": true,
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
       }
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true,
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "git": {
+      "type": "local",
+      "command": ["npx", "-y", "@cyanheads/git-mcp-server"],
+      "enabled": true
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
     }
   }
 }

@@ -1,238 +1,348 @@
-# opencode-config
+# opencode-orchestrator
 
-Template de configuracao para o [OpenCode](https://opencode.ai) — o agente de IA open source para programacao.
+Configuracao pessoal do OpenCode orientada a **otimizacao de quota**, com roteamento por **custo, risco, privacidade e tipo de dificuldade**.
 
-> Configuracao rapida. Sincronize entre maquinas via Git.
+> Route work to the right model, at the right reasoning level, for the right cost.
 
----
+A ideia central e simples:
 
-## Visao Geral
+> Quase tudo comeca no Luna. O Luna Lead continua dono da execucao e escala apenas quando o motivo da dificuldade justificar.
 
-| Componente | Detalhes |
+## Arquitetura v2.1
+
+### Execucao padrao
+
+```text
+                         ┌─ DeepSeek Free
+                         │
+                         ├─ Luna High
+Luna Lead Medium ────────┼─ Luna XHigh
+   execucao continua     │
+                         ├─ Terra Diagnostician Low
+                         │
+                         ├─ Terra Planner Low
+                         │
+                         └─ Strategic Advisor Terra Medium
+```
+
+O `luna-lead` e o default. Ele acompanha plano, tarefas, workers, integracao, testes e entrega final.
+
+Ele nao escala simplesmente porque algo ficou "dificil". Ele escala conforme **por que** ficou dificil:
+
+| Situacao | Rota |
 | --- | --- |
-| **Servidores MCP** | Brave Search, GitHub, Git History, Memory Graph |
-| **Agentes Customizados** | QA Engineer, Cybersecurity, DevOps, Backend, Frontend |
-| **Provedor LLM** | RT Mind (vLLM) — Qwen 3.5 & 3.6 |
+| Trabalho independente, paralelo e validavel | `deepseek-worker` |
+| Execucao importante e bem definida | `luna-worker` High |
+| Problema bem definido, mas High nao foi suficiente | `luna-worker-xhigh` |
+| Problema mal enquadrado, multi-camada ou circular | `terra-diagnostician` Low |
+| Projeto amplo precisa de plano/replanejamento | `terra-planner` Low |
+| Arquitetura, risco, seguranca ou trade-offs | `strategic-advisor` Terra Medium |
 
----
+### Projeto grande
 
-## Pre-requisitos
+O Terra nao precisa ficar sentado em todas as rodadas da execucao.
 
-- [Node.js](https://nodejs.org/) 18+ (necessario para `npx`)
-- [OpenCode](https://opencode.ai) instalado
-
----
-
-## Inicio Rapido
-
-1. Clone e execute o instalador:
-   ```bash
-   git clone https://github.com/rodrigomeneguet/opencode-config.git
-   cd opencode-config
-   bash setup.sh
-   ```
-
-2. O instalador vai:
-   - Detectar configuracao existente e perguntar sobre merge
-   - Solicitar chaves de API ausentes (Brave Search obrigatoria)
-   - Gerar arquivos de configuracao automaticamente
-   - Validar tudo ao final
-
-3. Reinicie o OpenCode. Teste com: `@qa-engineer ola`
-
-### Modos de instalacao
-
-```bash
-bash setup.sh              # Interativo (default) — pergunta tudo
-bash setup.sh --auto       # Automatico — usa .env ou valores existentes
-bash setup.sh --symlink    # Global com symlinks — atualiza com git pull
-bash setup.sh --project    # Projeto-level — copia para .opencode/ no CWD
-bash setup.sh --merge      # Apenas merge — nao sobrescreve nada
+```text
+Terra Planner Low
+       │
+       │ plano / checkpoint
+       ▼
+Luna Lead Medium
+       │
+       ├─ DeepSeek Free
+       ├─ Luna High
+       ├─ Luna XHigh
+       ├─ Terra Diagnostician Low
+       └─ Strategic Advisor Terra Medium
 ```
 
----
+Fluxo recomendado:
 
-## Estrutura de Arquivos
+1. use `terra-planner` quando o projeto ainda estiver nebuloso;
+2. Terra cria arquitetura, fases, dependencias, validacao e rollback;
+3. Luna Lead assume a execucao;
+4. Luna delega e integra as entregas;
+5. se o plano deixar de fazer sentido, Luna pode chamar `terra-planner` novamente;
+6. Terra devolve o plano revisado e Luna continua a execucao.
 
+O usuario tambem pode selecionar `terra-planner` manualmente. Ele usa `mode: all`, portanto funciona como agente selecionavel e como subagente do Luna Lead.
+
+## Agentes
+
+### `luna-lead`
+
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** Medium
+- **papel:** lider de execucao
+- **status:** default
+
+E o dono operacional da sessao. Resolve o que for simples, escolhe workers, valida entregas e decide quando escalar.
+
+### `deepseek-worker`
+
+- **modelo:** DeepSeek V4 Flash Free
+- **papel:** capacidade elastica gratuita
+
+Bom para exploracao, leitura, testes, documentacao, inventario, revisao independente, busca de padroes e tarefas objetivamente validaveis.
+
+Nao envie credenciais literais ou segredos desnecessariamente.
+
+### `luna-worker`
+
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** High
+- **papel:** worker premium normal
+
+Caminho padrao para implementacoes importantes, integracao e troubleshooting bem enquadrado.
+
+### `luna-worker-xhigh`
+
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** XHigh
+- **hidden:** true
+
+Nao aparece no seletor normal. O Luna Lead pode chama-lo quando o problema ja estiver bem definido, mas Luna High nao tiver profundidade suficiente.
+
+A ideia e espremer o Luna antes de pagar Terra quando o gargalo for profundidade, nao capacidade de enquadramento.
+
+### `terra-diagnostician`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Low
+- **papel:** RCA e diagnostico multi-camada
+
+Primeiro salto de capacidade quando o problema envolve varias hipoteses, cronologia, varias camadas ou diagnostico circular.
+
+### `terra-planner`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Low
+- **mode:** all
+- **papel:** planejamento e checkpoints
+
+Planeja projetos grandes e replaneja quando o contexto muda. Nao deve gerenciar a execucao rotineira.
+
+### `strategic-advisor`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Medium
+- **papel:** arquitetura, seguranca, risco e revisao critica
+
+O papel e desacoplado do motor. Para uma revisao excepcionalmente importante, ele pode ser promovido temporariamente para Sol sem alterar a arquitetura.
+
+## Escada de capacidade
+
+```text
+DeepSeek Free
+      │
+      ├─ volume e paralelismo
+      ▼
+Luna High
+      │
+      ├─ problema bem definido, precisa de mais profundidade
+      ▼
+Luna XHigh
+      │
+      ├─ problema esta mal enquadrado / multi-camada
+      ▼
+Terra Low
+      │
+      ├─ arquitetura / risco / julgamento
+      ▼
+Terra Medium
+      │
+      └─ excepcionalmente: Sol
 ```
+
+Essa escada **nao e totalmente linear**. Luna XHigh e Terra Low resolvem problemas diferentes:
+
+- XHigh: mais profundidade no mesmo enquadramento;
+- Terra: salto de capacidade quando o enquadramento ou julgamento e o gargalo.
+
+## Skills
+
+As antigas personas fixas de Backend, Frontend, DevOps, QA e Cybersecurity foram removidas. O conhecimento util foi preservado como skills sob demanda:
+
+- `infra-operations`
+- `security-review`
+- `software-testing`
+- `backend-engineering`
+- `frontend-engineering`
+
+Isso reduz poluicao no seletor de agentes.
+
+## Estrutura
+
+```text
+.opencode/
+├── agents/
+│   ├── luna-lead.md
+│   ├── terra-planner.md
+│   ├── deepseek-worker.md
+│   ├── luna-worker.md
+│   ├── luna-worker-xhigh.md
+│   ├── terra-diagnostician.md
+│   └── strategic-advisor.md
+└── skills/
+    ├── infra-operations/
+    ├── security-review/
+    ├── software-testing/
+    ├── backend-engineering/
+    └── frontend-engineering/
+
+docs/
+├── ARCHITECTURE.md
+├── ROUTING.md
+├── COST-STRATEGY.md
+└── INSTALLATION.md
+
+opencode.json
+setup.sh
+setup.ps1
+scripts/validate.sh
+.env.example
+```
+
+## Backup automatico obrigatorio
+
+**Todo uso de `setup.sh` ou `setup.ps1` cria um snapshot antes de qualquer alteracao**, inclusive antes de perguntar se o usuario deseja sobrescrever arquivos.
+
+Isso vale tambem para `--merge` / `-Merge` e para instalacao project-level.
+
+### Global
+
+O snapshot preserva toda a configuracao existente de:
+
+```text
 ~/.config/opencode/
-├── opencode.json              ← Configuracao de provedor e modelos
-├── opencode.jsonc             ← Servidores MCP (gerado pelo setup)
-├── .env                       ← Chaves de API (gerado pelo setup)
-└── .opencode/
-    └── agents/                ← Agentes customizados (invocaveis com @)
-        ├── qa-engineer.md     → Estrategia e automacao de testes
-        ├── cybersecurity.md   → Avaliacao de vulnerabilidades e OWASP
-        ├── devops.md          → CI/CD, containers, IaC
-        ├── backend.md         → Design de APIs, banco de dados, microservicos
-        └── frontend.md        → React/Vue, CSS, acessibilidade, performance
 ```
 
-> **Importante:** `opencode.json` configura provedores e modelos. `opencode.jsonc` configura servidores MCP. Agentes ficam em `.opencode/agents/`. Todos sao carregados pelo OpenCode.
+Linux/macOS/WSL:
 
-### Uso como projeto
-
-Ao clonar e rodar opencode deste diretorio, os agentes ja estao disponiveis em `.opencode/agents/` (projeto-level). Nenhuma copia global necessaria.
-
----
-
-## Servidores MCP
-
-| Servidor | Pacote | Finalidade | Chaves Necessarias |
-| --- | --- | --- | --- |
-| **Brave Search** | `@brave/brave-search-mcp-server` | Busca web, imagens, videos, noticias | `BRAVE_API_KEY` (obrigatoria) |
-| **GitHub** | `@modelcontextprotocol/server-github` | Issues, PRs, repos, gestao de arquivos | `GITHUB_PERSONAL_ACCESS_TOKEN` (opcional) |
-| **Git History** | `@cyanheads/git-mcp-server` | Commits locais, diffs, blame | Nenhuma |
-| **Memory Graph** | `@modelcontextprotocol/server-memory` | Estado persistente entre sessoes | Nenhuma |
-
----
-
-## Agentes Customizados
-
-Invocaveis com mencao `@` na sua sessao OpenCode:
-
-| Agente | Exemplo de Uso | Permissoes |
-| --- | --- | --- |
-| `@qa-engineer` | `@qa-engineer sugira testes para o modulo X` | Edicao (sim), Bash restrito |
-| `@cybersecurity` | `@cybersecurity audite o arquivo config.py` | Edicao (nao), Bash (somente leitura) |
-| `@devops` | `@devops crie um pipeline CI/CD para o projeto` | Edicao (sim), Bash restrito |
-| `@backend` | `@backend avalie a arquitetura de microservicos` | Edicao (sim), Bash restrito |
-| `@frontend` | `@frontend revise os componentes de UI` | Edicao (sim), Bash restrito |
-
-### Executar agentes em paralelo
-
-Varios agentes podem trabalhar na mesma tarefa de angulos diferentes:
-
-```
-@cybersecurity audite as vulnerabilidades do projeto
-@qa-engineer analise a cobertura de testes
-@devops sugira uma estrategia de CI/CD
+```text
+~/.config/opencode-backups/YYYYMMDD-HHMMSS-PID/
 ```
 
-Os tres executam simultaneamente e retornam relatorios independentes.
+Windows PowerShell:
 
----
+```text
+$HOME\.config\opencode-backups\YYYYMMDD-HHMMSS-PID\
+```
 
-## Obtendo suas Chaves de API
+### Project-level
 
-### Brave Search (obrigatoria)
+Preserva, quando existirem:
 
-1. Acesse [api-dashboard.search.brave.com](https://api-dashboard.search.brave.com)
-2. Faca login ou crie uma conta
-3. Gere uma nova chave de API
+```text
+opencode.json
+opencode.jsonc
+AGENTS.md
+.opencode/
+```
 
-O setup vai pedir a chave automaticamente. voce tambem pode configurar manualmente:
+em:
+
+```text
+<projeto>/.opencode-backups/YYYYMMDD-HHMMSS-PID/
+```
+
+O backup nao pode ser desativado pelo instalador. Detalhes e restauracao manual em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+
+## Instalacao Linux / macOS / WSL
 
 ```bash
-# No .env
-BRAVE_API_KEY=sua_chave_aqui
-```
-
-### GitHub Personal Access Token (opcional)
-
-1. Acesse [github.com/settings/tokens](https://github.com/settings/tokens)
-2. Gere um novo token com escopo `repo` (ou `public_repo` apenas para repos publicos)
-
-```bash
-# No .env
-GITHUB_PERSONAL_ACCESS_TOKEN=seu_token_aqui
-```
-
-> **Dica:** Use o escopo minimo necessario. Para muitos casos, `public_repo` e suficiente.
-
----
-
-## Sincronizando Atualizacoes
-
-Para atualizar sua configuracao deste repositorio:
-
-```bash
-cd opencode-config
-git pull origin master
-bash setup.sh --merge
-```
-
-O modo `--merge` vai:
-- Detectar configuracoes existentes
-- Perguntar antes de substituir qualquer coisa
-- Preservar suas chaves de API
-
-> Seus arquivos `opencode.jsonc` e `.env` estao protegidos pelo `.gitignore` e nao serao sobrescritos pelo git pull.
-
----
-
-## Adicionando Novos Agentes
-
-Crie um arquivo markdown em `.opencode/agents/`:
-
-```markdown
----
-description: Descricao do seu agente aqui
-mode: all
-permission:
-  edit: allow
-  bash:
-    "comando *": "allow"
----
-
-Voce e um [papel]. Foco em [especialidade]...
-```
-
-Em seguida, reinicie o OpenCode. O estara disponivel via `@nome-do-agente`.
-
----
-
-## Seguranca
-
-- **Nunca faca commit de `.env` ou `opencode.jsonc`** — estao no `.gitignore`
-- O `.gitignore` bloqueia: `opencode.jsonc`, `.env`, `opencode.json`
-- Rotacione suas chaves de API periodicamente
-- GitHub PAT: use os escopos minimos necessarios para seu fluxo de trabalho
-- O vLLM endpoint esta configurado para uso interno — nao compartilhe a URL publicamente
-
----
-
-## Solucao de Problemas
-
-### Agentes nao aparecem
-
-- Verifique se o frontmatter dos arquivos em `.opencode/agents/` esta formatado corretamente (cada campo em uma linha separada)
-- Reinicie o OpenCode completamente
-
-### Servidor MCP nao inicia
-
-- Verifique se o Node.js 18+ esta instalado: `node --version`
-- Teste manualmente: `npx -y @brave/brave-search-mcp-server --help`
-- Verifique se as chaves estao corretas no `.env`
-
-### Erro de conexao com o modelo
-
-- Confirme que o endpoint vLLM esta acessivel: `curl https://api-vllm.regionaltelhas.com.br/v1/models`
-- Verifique sua conexao com a internet
-
-### Configuracao nao e detectada
-
-- Certifique-se de que os arquivos estao em `~/.config/opencode/`
-- Reinicie o OpenCode apos qualquer alteracao
-
-### Reconfigurar chaves
-
-Execute novamente o setup:
-```bash
-cd opencode-config
+git clone https://github.com/rodrigomeneguet/opencode-orchestrator.git
+cd opencode-orchestrator
+git checkout feat/orchestration-v2
 bash setup.sh
 ```
 
-Ou edite diretamente:
+Modos:
+
 ```bash
-nano ~/.config/opencode/.env
+bash setup.sh              # global interativo
+bash setup.sh --auto       # global automatico
+bash setup.sh --merge      # preserva arquivos existentes
+bash setup.sh --symlink    # global usando symlinks
+bash setup.sh --project    # instala no projeto atual
 ```
 
----
+## Instalacao Windows PowerShell
 
-## Referencias
+No PowerShell, dentro do clone:
 
-- [Documentacao do OpenCode](https://opencode.ai/docs/)
-- [Servidores MCP](https://opencode.ai/docs/mcp-servers/)
-- [Configuracao de Agentes](https://opencode.ai/docs/agents/)
-- [Permissoes](https://opencode.ai/docs/permissions/)
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\setup.ps1
+```
+
+Modos:
+
+```powershell
+.\setup.ps1               # global interativo
+.\setup.ps1 -Auto         # global automatico
+.\setup.ps1 -Merge        # preserva arquivos existentes
+.\setup.ps1 -Project      # instala no projeto atual
+```
+
+Para Windows com WSL, use `setup.sh` dentro da distribuicao Linux.
+
+## Limpeza de agentes legados
+
+Os instaladores removem apenas nomes legados gerenciados por este repositorio:
+
+```text
+backend
+frontend
+devops
+qa-engineer
+cybersecurity
+luna-operator
+terra-lead
+```
+
+Eles nao removem agentes customizados desconhecidos.
+
+Como o backup ocorre antes da limpeza, os arquivos removidos continuam disponiveis no snapshot daquela execucao.
+
+## Variaveis de ambiente
+
+Bash:
+
+```bash
+export BRAVE_API_KEY="..."
+export GITHUB_PERSONAL_ACCESS_TOKEN="..."
+```
+
+PowerShell:
+
+```powershell
+$env:BRAVE_API_KEY="..."
+$env:GITHUB_PERSONAL_ACCESS_TOKEN="..."
+```
+
+Nunca versione credenciais.
+
+## Validacao
+
+Linux/macOS/WSL:
+
+```bash
+bash scripts/validate.sh
+opencode models
+```
+
+Depois abra o OpenCode e valide:
+
+1. `luna-lead` aparece como default;
+2. `terra-planner` aparece no seletor;
+3. `luna-worker-xhigh` nao aparece no seletor, mas pode ser chamado pelo Luna Lead;
+4. Luna Lead consegue delegar para DeepSeek, Luna High, Terra Diagnostician, Terra Planner e Strategic Advisor;
+5. os agentes antigos nao aparecem mais.
+
+## Documentacao detalhada
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/ROUTING.md`](docs/ROUTING.md)
+- [`docs/COST-STRATEGY.md`](docs/COST-STRATEGY.md)
+- [`docs/INSTALLATION.md`](docs/INSTALLATION.md)

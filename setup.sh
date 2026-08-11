@@ -1,453 +1,338 @@
 #!/usr/bin/env bash
-# setup.sh — Instalacao interativa do opencode-config
-# Detecta config existente, mescla, configura chaves interativamente
-# Uso: bash setup.sh [--auto|--project|--symlink|--merge]
 set -euo pipefail
 
-# ═══════════════════════════════════════════════════════════
-# Configuracao
-# ═══════════════════════════════════════════════════════════
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_DIR="${HOME}/.config/opencode"
-MODE="interactive"  # interactive|auto|project|merge
+GLOBAL_DIR="${HOME}/.config/opencode"
+GLOBAL_BACKUP_DIR="${HOME}/.config/opencode-backups"
+MODE="interactive"
 USE_SYMLINK=false
+LAST_BACKUP_DIR=""
+
+EXPECTED_AGENTS=(
+  "luna-lead"
+  "terra-planner"
+  "deepseek-worker"
+  "luna-worker"
+  "luna-worker-xhigh"
+  "terra-diagnostician"
+  "strategic-advisor"
+)
+
+EXPECTED_SKILLS=(
+  "infra-operations"
+  "security-review"
+  "software-testing"
+  "backend-engineering"
+  "frontend-engineering"
+)
 
 for arg in "$@"; do
   case "$arg" in
-    --auto)     MODE="auto" ;;
-    --project)  MODE="project" ;;
-    --symlink)  USE_SYMLINK=true ;;
-    --merge)    MODE="merge" ;;
+    --auto) MODE="auto" ;;
+    --project) MODE="project" ;;
+    --merge) MODE="merge" ;;
+    --symlink) USE_SYMLINK=true ;;
     --help|-h)
-      echo "Uso: bash setup.sh [OPCOES]"
-      echo ""
-      echo "Opcoes:"
-      echo "  (nenhum)    Modo interativo (default)"
-      echo "  --auto      Modo automatico (usa .env ou valores existentes)"
-      echo "  --project   Copia para .opencode/ no diretorio atual"
-      echo "  --symlink   Usa symlinks em vez de copias (global)"
-      echo "  --merge     Apenas merge (nao sobrescreve nada)"
-      echo "  --help      Mostra esta ajuda"
+      cat <<'HELP'
+Uso: bash setup.sh [opcao]
+
+  sem opcao    instalacao global interativa
+  --auto       instalacao global sem perguntas
+  --merge      instala apenas arquivos ausentes
+  --project    instala no projeto atual
+  --symlink    usa symlinks na instalacao global
+  --help       mostra esta ajuda
+
+Todo modo cria um backup timestampado ANTES de limpar, mesclar ou perguntar
+sobre sobrescrita. O backup nao pode ser desativado pelo instalador.
+HELP
       exit 0
       ;;
+    *) echo "Opcao desconhecida: $arg" >&2; exit 2 ;;
   esac
 done
 
-# ═══════════════════════════════════════════════════════════
-# Cores e helpers
-# ═══════════════════════════════════════════════════════════
-green()  { printf "\033[32m%s\033[0m\n" "$1"; }
-yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
-red()    { printf "\033[31m%s\033[0m\n" "$1"; }
-blue()   { printf "\033[34m%s\033[0m\n" "$1"; }
-bold()   { printf "\033[1m%s\033[0m\n" "$1"; }
+green()  { printf '\033[32m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+red()    { printf '\033[31m%s\033[0m\n' "$1"; }
+blue()   { printf '\033[34m%s\033[0m\n' "$1"; }
 
-ask_yes_no() {
-  local prompt="$1"
-  local default="${2:-y}"
-  local yn
-  if [[ "$MODE" == "auto" ]]; then
-    return 0
-  fi
-  if [[ "$default" == "y" ]]; then
-    read -rp "$prompt [S/n]: " yn
-    yn="${yn:-S}"
-  else
-    read -rp "$prompt [s/N]: " yn
-    yn="${yn:-N}"
-  fi
-  [[ "$yn" =~ ^[Ss]$ ]]
-}
-
-ask_value() {
-  local prompt="$1"
-  local var_name="$2"
-  local silent="${3:-false}"
-  if [[ "$MODE" == "auto" ]]; then
-    return 1
-  fi
-  if [[ "$silent" == "true" ]]; then
-    read -rsp "$prompt: " value
-    echo ""
-  else
-    read -rp "$prompt: " value
-  fi
-  if [[ -n "$value" ]]; then
-    eval "$var_name='$value'"
-    return 0
-  fi
-  return 1
-}
-
-# ═══════════════════════════════════════════════════════════
-# Carregar .env existente
-# ═══════════════════════════════════════════════════════════
-load_env() {
-  local env_file="$1"
-  if [[ -f "$env_file" ]]; then
-    while IFS= read -r line; do
-      if [[ "$line" =~ ^[A-Z_]+=.+$ ]]; then
-        local key="${line%%=*}"
-        local val="${line#*=}"
-        export "$key"="$val" 2>/dev/null || true
-      fi
-    done < "$env_file"
+show_source_version() {
+  blue "Fonte da configuracao: ${REPO_DIR}"
+  if command -v git >/dev/null 2>&1 && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local branch commit
+    branch="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || true)"
+    commit="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    echo "  branch: ${branch:-detached}"
+    echo "  commit: ${commit:-desconhecido}"
   fi
 }
 
-# ═══════════════════════════════════════════════════════════
-# Header
-# ═══════════════════════════════════════════════════════════
-echo ""
-bold "╔═══════════════════════════════════════════════════╗"
-bold "║        opencode-config — Instalacao              ║"
-bold "╚═══════════════════════════════════════════════════╝"
-echo ""
-blue "Modo: ${MODE}"
-echo ""
+preflight_source() {
+  local missing=0
+  blue "Preflight da v2.1"
 
-# ═══════════════════════════════════════════════════════════
-# FASE 1: Detectar instalacao existente
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 1: Detectando configuracao existente ──"
+  [[ -f "${REPO_DIR}/opencode.json" ]] || { red "  fonte AUSENTE: opencode.json"; missing=$((missing + 1)); }
 
-EXISTING_PROVIDER=""
-EXISTING_MCPS=""
-EXISTING_ENV=""
-
-if [[ -f "${CONFIG_DIR}/opencode.json" ]]; then
-  green "  ✓ opencode.json encontrado em ${CONFIG_DIR}/"
-  EXISTING_PROVIDER=$(cat "${CONFIG_DIR}/opencode.json" 2>/dev/null || echo "")
-fi
-
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  green "  ✓ opencode.jsonc encontrado em ${CONFIG_DIR}/"
-  EXISTING_MCPS=$(cat "${CONFIG_DIR}/opencode.jsonc" 2>/dev/null || echo "")
-fi
-
-if [[ -f "${CONFIG_DIR}/.env" ]]; then
-  green "  ✓ .env encontrado em ${CONFIG_DIR}/"
-  EXISTING_ENV="exists"
-  load_env "${CONFIG_DIR}/.env"
-fi
-
-if [[ -z "$EXISTING_PROVIDER" && -z "$EXISTING_MCPS" && -z "$EXISTING_ENV" ]]; then
-  yellow "  ⚠ Nenhuma configuracao existente encontrada — instalacao limpa"
-fi
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 2: Merge de configuracao
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 2: Merge de configuracao ──"
-
-if [[ "$MODE" == "project" ]]; then
-  blue "  Modo projeto: copiando para .opencode/ no CWD"
-  TARGET_DIR="$(pwd)/.opencode"
-  mkdir -p "${TARGET_DIR}/agents"
-
-  for agent in "${REPO_DIR}"/.opencode/agents/*.md; do
-    filename="$(basename "$agent")"
-    if ${USE_SYMLINK}; then
-      ln -sf "$agent" "${TARGET_DIR}/agents/${filename}"
+  for name in "${EXPECTED_AGENTS[@]}"; do
+    if [[ -f "${REPO_DIR}/.opencode/agents/${name}.md" ]]; then
+      green "  fonte OK: ${name}"
     else
-      cp -u "$agent" "${TARGET_DIR}/agents/${filename}"
+      red "  fonte AUSENTE: ${name}"
+      missing=$((missing + 1))
     fi
-    green "  ✓ ${filename}"
   done
 
-  if [[ ! -f "$(pwd)/opencode.json" ]]; then
-    cp "${REPO_DIR}/opencode.json" "$(pwd)/opencode.json"
-    green "  ✓ opencode.json copiado"
-  else
-    yellow "  ⚠ opencode.json ja existe no projeto"
-  fi
-
-  # Copiar MCP config se nao existir
-  if [[ ! -f "$(pwd)/opencode.jsonc" ]]; then
-    cp "${REPO_DIR}/opencode.jsonc.example" "$(pwd)/opencode.jsonc"
-    green "  ✓ opencode.jsonc criado (edite com suas chaves)"
-  fi
-
-  echo ""
-  green "  Instalacao de projeto concluida!"
-  echo ""
-  exit 0
-fi
-
-# Modo global: merge provider
-if [[ -n "$EXISTING_PROVIDER" ]]; then
-  yellow "  Configuracao de provider existente detectada"
-  if ask_yes_no "  Deseja substituir pelo provider do repo (rt-vllm/Qwen)?"; then
-    mkdir -p "${CONFIG_DIR}"
-    if ${USE_SYMLINK}; then
-      ln -sf "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
+  for name in "${EXPECTED_SKILLS[@]}"; do
+    if [[ -f "${REPO_DIR}/.opencode/skills/${name}/SKILL.md" ]]; then
+      green "  skill OK: ${name}"
     else
-      cp "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
+      red "  skill AUSENTE: ${name}"
+      missing=$((missing + 1))
     fi
-    green "  ✓ Provider atualizado"
-  else
-    yellow "  → Provider existente preservado"
-  fi
-else
-  mkdir -p "${CONFIG_DIR}"
-  if ${USE_SYMLINK}; then
-    ln -sf "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
-  else
-    cp "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
-  fi
-  green "  ✓ opencode.json instalado"
-fi
+  done
 
-# Merge agentes
-blue "  Instalando agentes..."
-mkdir -p "${CONFIG_DIR}/.opencode/agents"
-for agent in "${REPO_DIR}"/.opencode/agents/*.md; do
-  filename="$(basename "$agent")"
-  if ${USE_SYMLINK}; then
-    ln -sf "$agent" "${CONFIG_DIR}/.opencode/agents/${filename}"
-  else
-    cp -u "$agent" "${CONFIG_DIR}/.opencode/agents/${filename}"
-  fi
-  green "  ✓ ${filename}"
-done
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 3: Configuracao de chaves
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 3: Configuracao de chaves de API ──"
-
-# Variaveis obrigatorias
-declare -A REQUIRED_KEYS=(
-  ["BRAVE_API_KEY"]="obrigatoria"
-)
-
-# Variaveis opcionais
-declare -A OPTIONAL_KEYS=(
-  ["GITHUB_PERSONAL_ACCESS_TOKEN"]="recomendada (para GitHub MCP)"
-)
-
-configure_key() {
-  local key="$1"
-  local desc="$2"
-  local current_value="${!key:-}"
-
-  # Ja tem valor?
-  if [[ -n "$current_value" ]]; then
-    local masked="${current_value:0:4}****${current_value: -4}"
-    green "  ✓ ${key}: ${masked}"
-    if [[ "$MODE" != "auto" ]]; then
-      if ask_yes_no "    Deseja alterar ${key}?"; then
-        if ask_value "    Novo valor para ${key}" "new_val" true; then
-          export "$key"="$new_val"
-          green "    → ${key} atualizada"
-        fi
-      fi
-    fi
-    return 0
-  fi
-
-  # Nao tem valor — perguntar
-  yellow "  ⚠ ${key} nao configurada"
-  if [[ "$desc" == "obrigatoria" ]]; then
-    blue "    (${desc}: necessaria para Brave Search MCP)"
-  else
-    blue "    (${desc})"
-  fi
-
-  if [[ "$MODE" == "auto" ]]; then
-    red "    ✗ ${key} ausente — modo auto nao pode configurar"
-    return 1
-  fi
-
-  if ask_yes_no "    Deseja configurar ${key} agora?"; then
-    if ask_value "    Digite o valor de ${key}" "new_val" true; then
-      export "$key"="$new_val"
-      green "    → ${key} configurada"
-      return 0
-    else
-      red "    ✗ Valor vazio — ${key} nao configurada"
-      return 1
-    fi
-  else
-    yellow "    → ${key} pulada"
-    return 1
+  if [[ "$missing" -gt 0 ]]; then
+    echo ""
+    red "Seu clone local nao contem toda a topologia v2.1. Instalacao abortada."
+    echo "  git fetch origin"
+    echo "  git checkout feat/orchestration-v2"
+    echo "  git pull --ff-only origin feat/orchestration-v2"
+    echo "  bash setup.sh"
+    exit 1
   fi
 }
 
-MISSING_KEYS=0
-BRAVE_CONFIGURED=false
-GITHUB_CONFIGURED=false
+backup_current_config() {
+  local root="$1"
+  local scope="$2"
+  local timestamp backup_base backup_dir copied=0
 
-for key in "${!REQUIRED_KEYS[@]}"; do
-  if ! configure_key "$key" "${REQUIRED_KEYS[$key]}"; then
-    MISSING_KEYS=$((MISSING_KEYS + 1))
+  timestamp="$(date '+%Y%m%d-%H%M%S')-$$"
+
+  if [[ "$scope" == "project" ]]; then
+    backup_base="${root}/.opencode-backups"
   else
-    BRAVE_CONFIGURED=true
+    backup_base="$GLOBAL_BACKUP_DIR"
   fi
-done
 
-for key in "${!OPTIONAL_KEYS[@]}"; do
-  if configure_key "$key" "${OPTIONAL_KEYS[$key]}"; then
-    GITHUB_CONFIGURED=true
-  fi
-done
-echo ""
+  backup_dir="${backup_base}/${timestamp}"
+  mkdir -p "$backup_dir"
 
-# ═══════════════════════════════════════════════════════════
-# FASE 4: Gerar arquivos
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 4: Gerando arquivos de configuracao ──"
+  {
+    echo "opencode-config backup"
+    echo "created_at=$(date -Iseconds 2>/dev/null || date)"
+    echo "scope=${scope}"
+    echo "source=${root}"
+    echo "installer_repo=${REPO_DIR}"
+  } > "${backup_dir}/BACKUP_INFO.txt"
 
-# Gerar opencode.jsonc
-blue "  Gerando opencode.jsonc..."
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  cp "${CONFIG_DIR}/opencode.jsonc" "${CONFIG_DIR}/opencode.jsonc.bak"
-  yellow "  → Backup: opencode.jsonc.bak"
-fi
-
-# Copiar template
-cp "${REPO_DIR}/opencode.jsonc.example" "${CONFIG_DIR}/opencode.jsonc"
-
-# Substituir placeholders e desabilitar MCPs sem chave
-if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
-  sed -i "s/{YOUR_BRAVE_API_KEY}/${BRAVE_API_KEY}/g" "${CONFIG_DIR}/opencode.jsonc"
-  green "  ✓ brave-search: habilitado"
-else
-  # Desabilitar brave-search (linha 8 do template)
-  sed -i '/brave-search/,/enabled/{
-    /"enabled": true/s/"enabled": true/"enabled": false/
-  }' "${CONFIG_DIR}/opencode.jsonc"
-  yellow "  ⚠ brave-search: desabilitado (chave ausente)"
-fi
-
-if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
-  sed -i "s/{YOUR_GITHUB_TOKEN}/${GITHUB_PERSONAL_ACCESS_TOKEN}/g" "${CONFIG_DIR}/opencode.jsonc"
-  green "  ✓ github: habilitado"
-else
-  # Desabilitar github (proximo "enabled": true apos github)
-  sed -i '/github/,/enabled/{
-    /"enabled": true/s/"enabled": true/"enabled": false/
-  }' "${CONFIG_DIR}/opencode.jsonc"
-  yellow "  ⚠ github: desabilitado (chave ausente)"
-fi
-
-# Gerar .env
-blue "  Gerando .env..."
-cat > "${CONFIG_DIR}/.env" << EOF
-# Variaveis de ambiente para opencode-config
-# Gerado por setup.sh em $(date '+%Y-%m-%d %H:%M:%S')
-
-BRAVE_API_KEY=${BRAVE_API_KEY:-}
-GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
-EOF
-green "  ✓ .env gerado"
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 5: Verificacao final
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 5: Verificacao final ──"
-
-ERRORS=0
-
-# Verificar opencode.json
-if [[ -f "${CONFIG_DIR}/opencode.json" ]]; then
-  if node -e "JSON.parse(require('fs').readFileSync('${CONFIG_DIR}/opencode.json','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.json: valido"
+  if [[ "$scope" == "project" ]]; then
+    for item in opencode.json opencode.jsonc AGENTS.md .opencode; do
+      if [[ -e "${root}/${item}" || -L "${root}/${item}" ]]; then
+        cp -a "${root}/${item}" "$backup_dir/"
+        copied=$((copied + 1))
+      fi
+    done
   else
-    red "  ✗ opencode.json: JSON invalido"
-    ERRORS=$((ERRORS + 1))
+    if [[ -d "$root" ]]; then
+      mkdir -p "${backup_dir}/config"
+      cp -a "${root}/." "${backup_dir}/config/"
+      copied=1
+    fi
   fi
-else
-  red "  ✗ opencode.json: nao encontrado"
-  ERRORS=$((ERRORS + 1))
-fi
 
-# Verificar opencode.jsonc
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  if node -e "JSON.parse(require('fs').readFileSync('${CONFIG_DIR}/opencode.jsonc','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.jsonc: valido"
+  if [[ "$copied" -eq 0 ]]; then
+    echo "No previous OpenCode configuration was found." >> "${backup_dir}/BACKUP_INFO.txt"
+    yellow "Backup criado, mas nao havia configuracao anterior para copiar."
   else
-    red "  ✗ opencode.jsonc: JSON invalido"
-    ERRORS=$((ERRORS + 1))
+    green "Backup obrigatorio criado: ${backup_dir}"
   fi
-else
-  red "  ✗ opencode.jsonc: nao encontrado"
-  ERRORS=$((ERRORS + 1))
-fi
 
-# Verificar chaves
-for key in "${!REQUIRED_KEYS[@]}"; do
-  if [[ -n "${!key:-}" ]]; then
-    green "  ✓ ${key}: configurada"
+  LAST_BACKUP_DIR="$backup_dir"
+}
+
+ask_replace() {
+  local target="$1"
+  [[ ! -e "$target" && ! -L "$target" ]] && return 0
+  [[ "$MODE" == "auto" ]] && return 0
+  [[ "$MODE" == "merge" ]] && return 1
+
+  local answer
+  read -rp "Substituir ${target}? [S/n]: " answer </dev/tty
+  [[ ! "${answer:-S}" =~ ^[Nn]$ ]]
+}
+
+install_file() {
+  local src="$1" target="$2"
+  mkdir -p "$(dirname "$target")"
+
+  if ! ask_replace "$target"; then
+    yellow "  preservado: $target"
+    return 0
+  fi
+
+  # Mantem tambem o .bak imediato por conveniencia, alem do snapshot completo.
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    cp -a "$target" "${target}.bak"
+  fi
+
+  if $USE_SYMLINK && [[ "$MODE" != "project" ]]; then
+    ln -sfn "$src" "$target"
   else
-    yellow "  ⚠ ${key}: ausente (brave-search desabilitado)"
+    cp -a "$src" "$target"
   fi
-done
 
-for key in "${!OPTIONAL_KEYS[@]}"; do
-  if [[ -n "${!key:-}" ]]; then
-    green "  ✓ ${key}: configurada"
-  else
-    yellow "  ⚠ ${key}: ausente (github desabilitado)"
+  green "  instalado: $target"
+}
+
+install_managed_files() {
+  local agents_dir="$1"
+  local skills_dir="$2"
+  local name
+
+  mkdir -p "$agents_dir" "$skills_dir"
+
+  # Instalacao orientada pelo inventario esperado. Evita loops dependentes de stdin.
+  for name in "${EXPECTED_AGENTS[@]}"; do
+    install_file "${REPO_DIR}/.opencode/agents/${name}.md" "${agents_dir}/${name}.md"
+  done
+
+  for name in "${EXPECTED_SKILLS[@]}"; do
+    install_file "${REPO_DIR}/.opencode/skills/${name}/SKILL.md" "${skills_dir}/${name}/SKILL.md"
+  done
+}
+
+cleanup_legacy_agents() {
+  local target_dir="$1"
+  local removed=0
+  local filename
+  local legacy_agents=(
+    "qa-engineer.md"
+    "cybersecurity.md"
+    "devops.md"
+    "backend.md"
+    "frontend.md"
+    "luna-operator.md"
+    "terra-lead.md"
+  )
+
+  [[ -d "$target_dir" ]] || return 0
+
+  for filename in "${legacy_agents[@]}"; do
+    if [[ -e "${target_dir}/${filename}" || -L "${target_dir}/${filename}" ]]; then
+      rm -f "${target_dir}/${filename}"
+      yellow "  removido agente legado: ${target_dir}/${filename}"
+      removed=$((removed + 1))
+    fi
+  done
+
+  if [[ "$removed" -gt 0 ]]; then
+    green "  limpeza concluida: ${removed} agente(s) legado(s) removido(s)"
   fi
-done
+}
 
-# Verificar MCPs
-echo ""
-blue "  Status dos MCPs:"
-if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
-  green "    ✓ brave-search: ativo"
-else
-  yellow "    ⚠ brave-search: inativo (execute setup.sh para configurar)"
-fi
-if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
-  green "    ✓ github: ativo"
-else
-  yellow "    ⚠ github: inativo (execute setup.sh para configurar)"
-fi
-green "    ✓ git: ativo"
-green "    ✓ memory: ativo"
+verify_installation() {
+  local root="$1"
+  local agents_dir="$2"
+  local skills_dir="$3"
+  local errors=0
+  local name
 
-# Verificar agentes
-AGENT_COUNT=$(ls -1 "${CONFIG_DIR}/.opencode/agents/"*.md 2>/dev/null | wc -l)
-if [[ "$AGENT_COUNT" -gt 0 ]]; then
-  green "  ✓ ${AGENT_COUNT} agente(s) instalado(s)"
-else
-  red "  ✗ Nenhum agente encontrado"
-  ERRORS=$((ERRORS + 1))
-fi
-
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# Resumo
-# ═══════════════════════════════════════════════════════════
-if [[ $ERRORS -eq 0 ]]; then
-  bold "╔═══════════════════════════════════════════════════╗"
-  green "║       ✓ Instalacao concluida com sucesso!       ║"
-  bold "╚═══════════════════════════════════════════════════╝"
   echo ""
-  echo "  Arquivos instalados em: ${CONFIG_DIR}/"
-  echo ""
-  if [[ "$BRAVE_CONFIGURED" == "false" || "$GITHUB_CONFIGURED" == "false" ]]; then
-    echo "  MCPs parciais (chaves ausentes):"
-    [[ "$BRAVE_CONFIGURED" == "false" ]] && echo "    - brave-search: Execute setup.sh para adicionar a chave"
-    [[ "$GITHUB_CONFIGURED" == "false" ]] && echo "    - github: Execute setup.sh para adicionar o token"
+  blue "Verificando instalacao efetiva"
+
+  if [[ ! -f "${root}/opencode.json" ]]; then
+    red "  AUSENTE: ${root}/opencode.json"
+    errors=$((errors + 1))
+  elif ! grep -q '"default_agent"[[:space:]]*:[[:space:]]*"luna-lead"' "${root}/opencode.json"; then
+    red "  opencode.json instalado nao aponta para luna-lead"
+    errors=$((errors + 1))
+  else
+    green "  default_agent: luna-lead"
+  fi
+
+  for name in "${EXPECTED_AGENTS[@]}"; do
+    if [[ -f "${agents_dir}/${name}.md" || -L "${agents_dir}/${name}.md" ]]; then
+      green "  agente instalado: ${name}"
+    else
+      red "  agente AUSENTE no destino: ${name}"
+      errors=$((errors + 1))
+    fi
+  done
+
+  for name in "${EXPECTED_SKILLS[@]}"; do
+    if [[ -f "${skills_dir}/${name}/SKILL.md" || -L "${skills_dir}/${name}/SKILL.md" ]]; then
+      green "  skill instalada: ${name}"
+    else
+      red "  skill AUSENTE no destino: ${name}"
+      errors=$((errors + 1))
+    fi
+  done
+
+  if [[ "$errors" -gt 0 ]]; then
     echo ""
+    red "Instalacao incompleta: ${errors} item(ns) esperado(s) ausente(s)."
+    red "Backup preservado em: ${LAST_BACKUP_DIR}"
+    exit 1
   fi
-  echo "  Proximos passos:"
-  echo "    1. Reinicie o OpenCode"
-  echo "    2. Teste: @qa-engineer ola"
-  echo ""
+
+  green "Topologia v2.1 instalada por completo."
+}
+
+show_source_version
+preflight_source
+echo ""
+
+if [[ "$MODE" == "project" ]]; then
+  ROOT="$(pwd)"
+  AGENTS_DIR="${ROOT}/.opencode/agents"
+  SKILLS_DIR="${ROOT}/.opencode/skills"
+
+  blue "Instalacao project-level em ${ROOT}"
+
+  # O backup acontece antes de qualquer limpeza ou pergunta de sobrescrita.
+  backup_current_config "$ROOT" "project"
+
+  cleanup_legacy_agents "$AGENTS_DIR"
+  install_file "${REPO_DIR}/opencode.json" "${ROOT}/opencode.json"
+  install_managed_files "$AGENTS_DIR" "$SKILLS_DIR"
+  verify_installation "$ROOT" "$AGENTS_DIR" "$SKILLS_DIR"
 else
-  bold "╔═══════════════════════════════════════════════════╗"
-  red "║    ✗ Instalacao com erros (${ERRORS} erro(s))           ║"
-  bold "╚═══════════════════════════════════════════════════╝"
-  echo ""
-  echo "  Corrija os erros acima e execute novamente."
-  echo ""
+  ROOT="$GLOBAL_DIR"
+  AGENTS_DIR="${GLOBAL_DIR}/agents"
+  SKILLS_DIR="${GLOBAL_DIR}/skills"
+
+  blue "Instalacao global em ${GLOBAL_DIR}"
+
+  # O backup acontece antes de mkdir/cleanup/install e independe da escolha do usuario.
+  backup_current_config "$ROOT" "global"
+
+  mkdir -p "$GLOBAL_DIR"
+  cleanup_legacy_agents "${GLOBAL_DIR}/agents"
+  cleanup_legacy_agents "${GLOBAL_DIR}/.opencode/agents"
+  install_file "${REPO_DIR}/opencode.json" "${GLOBAL_DIR}/opencode.json"
+  install_managed_files "$AGENTS_DIR" "$SKILLS_DIR"
+  verify_installation "$ROOT" "$AGENTS_DIR" "$SKILLS_DIR"
+fi
+
+echo ""
+blue "MCPs opcionais:"
+[[ -n "${BRAVE_API_KEY:-}" ]] && green "  BRAVE_API_KEY encontrada" || yellow "  BRAVE_API_KEY ausente"
+[[ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]] && green "  GITHUB_PERSONAL_ACCESS_TOKEN encontrado" || yellow "  GITHUB_PERSONAL_ACCESS_TOKEN ausente"
+
+echo ""
+blue "Validando repositorio..."
+if bash "${REPO_DIR}/scripts/validate.sh"; then
+  green "Configuracao instalada e validada."
+else
+  red "A validacao encontrou problemas."
+  red "Backup preservado em: ${LAST_BACKUP_DIR}"
   exit 1
 fi
+
+echo ""
+green "Backup pre-instalacao: ${LAST_BACKUP_DIR}"
+echo "Primarios esperados no seletor: luna-lead, terra-planner"
+echo "Subagentes: deepseek-worker, luna-worker, terra-diagnostician, strategic-advisor"
+echo "Oculto: luna-worker-xhigh"

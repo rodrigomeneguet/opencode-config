@@ -1,6 +1,6 @@
 opencode.jsonc
-opencode.json
 .env
+.opencode-backups/
 .DS_Store
 Thumbs.db
 .idea/
