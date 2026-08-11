@@ -1,49 +1,109 @@
-# Arquitetura de Orquestracao
+# Architecture
 
-## Objetivo
+## Principio central
 
-Maximizar trabalho concluido por unidade de quota sem perder qualidade em tarefas de infraestrutura e desenvolvimento.
+O sistema roteia trabalho por **custo, risco e tipo de incerteza**.
 
-## Camadas
+O `luna-lead` e o dono da execucao continua. Terra entra de forma episodica quando sua capacidade adicional realmente agrega valor.
 
-### Luna Operator
+## Execucao padrao
 
-Ponto de entrada padrao e controlador da sessao. Resolve tarefas pequenas diretamente, mantem o contexto principal e decide quando delegar.
+```text
+                         ┌─ DeepSeek Free
+                         │
+                         ├─ Luna High
+Luna Lead Medium ────────┼─ Luna XHigh
+   execucao continua     │
+                         ├─ Terra Diagnostician Low
+                         │
+                         ├─ Terra Planner Low
+                         │
+                         └─ Strategic Advisor Terra Medium
+```
 
-### Workers
+### Luna Lead
 
-- `deepseek-worker`: capacidade gratuita e elastica. Deve absorver agressivamente exploracao, logs, configuracoes, testes, debugging, refatoracoes, revisoes e implementacoes delimitadas sempre que a saida puder ser validada.
-- `luna-worker`: executor premium em XHigh para caminho critico, alta integracao, falha do DeepSeek ou preferencia explicita do usuario.
+Responsavel por:
 
-Repositorio privado, codigo privado, log real e configuracao interna nao sao tratados automaticamente como material proibido para DeepSeek. Segredos evidentes devem ser mascarados ou removidos quando possivel sem inutilizar toda a tarefa.
+- entender a demanda;
+- manter plano e TODO;
+- decidir o que resolve sozinho;
+- escolher e orientar workers;
+- integrar resultados;
+- validar diffs, testes e comportamento;
+- decidir quando escalar;
+- entregar o resultado final.
 
-### Diagnostico
+## Projeto grande
 
-`terra-diagnostician` atua somente em leitura. Seu papel e reduzir incerteza, correlacionar camadas, produzir hipoteses concorrentes e sugerir testes discriminadores.
+```text
+Terra Planner Low
+       │
+       │ cria plano / checkpoint
+       ▼
+Luna Lead Medium
+       │
+       ├─ DeepSeek Free
+       ├─ Luna High
+       ├─ Luna XHigh
+       ├─ Terra Diagnostician Low
+       └─ Strategic Advisor Terra Medium
+```
 
-### Coordenacao de projeto
+O Terra Planner nao acompanha cada worker. Ele participa no inicio e em checkpoints semanticos:
 
-`terra-lead` e um segundo agente primario. Selecione-o quando houver varias frentes dependentes, integracao complexa ou necessidade real de coordenar workers.
+- arquitetura inicial;
+- mudanca relevante de escopo;
+- descoberta que invalida premissas;
+- reorganizacao de fases;
+- antes de uma etapa estrutural critica.
 
-Em projetos grandes, Terra Lead deve usar bastante DeepSeek para trabalho paralelo e verificavel e reservar Luna XHigh para trechos mais criticos ou quando o usuario pedir.
+Depois do checkpoint, a execucao volta ao Luna Lead.
 
-### Advisor
+## Escalonamento automatico pelo Luna
 
-`strategic-advisor` e um papel, nao um modelo. O motor padrao e Terra Medium. Pode ser promovido para Sol em revisoes excepcionais sem mudar o contrato operacional do agente.
+O Luna Lead pode chamar diretamente:
 
-## Por que os antigos agentes de funcao foram removidos
+```text
+DeepSeek Worker
+Luna Worker High
+Luna Worker XHigh
+Terra Diagnostician Low
+Terra Planner Low
+Strategic Advisor Terra Medium
+```
 
-DevOps, QA, Backend, Frontend e Cybersecurity misturavam duas dimensoes diferentes:
+O usuario tambem pode selecionar `terra-planner` manualmente porque ele usa `mode: all`.
 
-1. quem coordena ou executa;
-2. qual conhecimento de dominio e necessario.
+## Diferenca entre XHigh e Terra
 
-Na v2, os agentes representam responsabilidades na cadeia de decisao. Especialidades de dominio foram movidas para skills carregadas sob demanda.
+Esses dois caminhos nao sao equivalentes.
 
-## Profundidade de subagentes
+```text
+Problema bem enquadrado
++ precisa pensar mais
+        ↓
+Luna XHigh
+```
 
-`subagent_depth` permanece em `1`: agentes primarios podem chamar subagentes; subagentes nao criam outros subagentes. Isso reduz cascatas de custo e mantem responsabilidade clara.
+```text
+Problema mal enquadrado
++ hipoteses/camadas conflitantes
+        ↓
+Terra Diagnostician
+```
 
-## Preferencia manual
+Aumentar o effort do mesmo modelo e trocar de modelo resolvem gargalos diferentes.
 
-Para uma tarefa, projeto ou ambiente mais serio, o usuario pode simplesmente instruir `luna-operator` ou `terra-lead` a preferir `luna-worker`. Essa preferencia tem prioridade sobre o roteamento economico padrao.
+## Papel do Strategic Advisor
+
+O advisor continua somente leitura e focado em:
+
+- arquitetura;
+- seguranca;
+- blast radius;
+- rollback e recuperacao;
+- trade-offs duradouros;
+- revisao critica.
+
+O motor padrao e Terra Medium. Sol fica reservado para promocao manual em revisoes excepcionais.
