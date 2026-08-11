@@ -1,90 +1,124 @@
-# Politica de Roteamento
+# Routing
 
 ## Regra principal
 
-Tudo comeca no `luna-operator`.
+O roteamento nao deve seguir uma escada cega de "mais dificil = modelo maior".
 
-O objetivo e economizar quota OpenAI sem sacrificar controle. Por isso, `deepseek-worker` deve ser usado agressivamente como primeira opcao de worker sempre que a tarefa puder ser revisada ou validada depois.
+A pergunta correta e:
 
-## DeepSeek Worker
+> **Qual e o gargalo desta tarefa?**
 
-Use amplamente para:
+## Tabela de decisao
 
-- exploracao de codebase;
-- leitura e correlacao de logs;
-- revisao de configuracoes;
-- testes;
-- documentacao;
-- debugging;
-- refatoracoes delimitadas;
-- implementacoes isoladas;
-- revisao de diff;
-- scripts e IaC;
-- investigacoes paralelas;
-- segunda opiniao.
+| Gargalo | Rota |
+| --- | --- |
+| Volume, paralelismo, leitura ou tarefa validavel | DeepSeek Worker |
+| Execucao importante e bem definida | Luna Worker High |
+| Problema bem definido, mas High ficou raso | Luna Worker XHigh |
+| Problema mal enquadrado, varias hipoteses/camadas | Terra Diagnostician Low |
+| Projeto amplo precisa de plano ou replanejamento | Terra Planner Low |
+| Arquitetura, risco, seguranca, rollback, trade-offs | Strategic Advisor Terra Medium |
+| Revisao excepcionalmente critica | promover Advisor para Sol manualmente |
 
-Repositorios privados, codigo privado, logs reais e configuracoes internas NAO sao automaticamente motivos para evitar o DeepSeek.
+## Fluxo padrao
 
-Se houver credenciais ou segredos evidentes, prefira remover ou mascarar somente os valores sensiveis e continuar delegando o restante do material.
+```text
+Luna Lead Medium
+   │
+   ├─ simples/pequeno ───────────────→ resolve diretamente
+   │
+   ├─ barato/validavel ──────────────→ DeepSeek Free
+   │
+   ├─ execucao premium ──────────────→ Luna High
+   │                                      │
+   │                                      └─ falta profundidade
+   │                                             ↓
+   │                                          Luna XHigh
+   │
+   ├─ enquadramento ruim/multi-camada ──→ Terra Diagnostician Low
+   │
+   ├─ plano ficou insuficiente ─────────→ Terra Planner Low
+   │
+   └─ arquitetura/risco ────────────────→ Strategic Advisor Terra Medium
+```
 
-O usuario pode sempre substituir essa regra e pedir explicitamente para uma tarefa, projeto ou ambiente preferir `luna-worker`.
+## DeepSeek vs Luna
 
-## Luna Worker XHigh
+Use DeepSeek quando a saida puder ser validada de maneira objetiva e o risco for baixo.
 
-Use como worker premium quando:
+Use Luna quando:
 
-- o usuario pedir explicitamente;
-- a tarefa estiver no caminho critico;
-- houver alta integracao entre componentes;
-- a validacao objetiva for dificil;
-- o impacto de erro for alto;
-- o DeepSeek ja tiver falhado ou entregue resultado insuficiente.
+- estiver no caminho critico;
+- a integracao for forte;
+- a fidelidade ao contexto for importante;
+- houver maior sensibilidade de dados;
+- a qualidade do DeepSeek tiver sido insuficiente.
 
-## Terra Diagnostician
+## Luna High vs Luna XHigh
 
-Use quando:
+Use High como worker premium normal.
 
-- existem varias hipoteses plausiveis;
-- logs e sintomas atravessam componentes;
-- duas tentativas razoaveis falharam;
-- o problema e intermitente;
-- cronologia, topologia e dependencias precisam ser correlacionadas;
-- a causa raiz ainda nao esta demonstrada.
+Use XHigh somente se:
 
-## Strategic Advisor
+1. o problema estiver bem delimitado;
+2. High ja tiver sido insuficiente ou demonstrar baixa confianca;
+3. o gargalo parecer profundidade adicional de raciocinio.
 
-Use quando:
+Nao use XHigh para compensar um problema mal definido.
 
-- ha decisao arquitetural;
-- seguranca ou identidade estao em jogo;
-- existe risco de perda de dados ou indisponibilidade ampla;
-- a mudanca e dificil de reverter;
-- backup, recuperacao ou rollback precisam ser validados;
-- ha trade-off de longo prazo;
-- Terra e Luna continuam incertos.
+## Luna XHigh vs Terra Low
 
-O papel e desacoplado do modelo. Terra Medium e o default atual; promova para Sol quando necessario.
+```text
+Mesmo enquadramento, precisa aprofundar → Luna XHigh
+Enquadramento duvidoso, varias camadas → Terra Low
+```
 
-## Terra Lead
+Essa e uma das decisoes mais importantes da arquitetura.
 
-Selecione manualmente quando a tarefa deixa de ser uma intervencao e vira um projeto:
+## Terra Planner
 
-- varias frentes dependentes;
-- varios componentes/repositorios;
-- migracao em fases;
-- integracao entre backend, frontend, banco, automacao e observabilidade;
-- incidente complexo com coordenacao de varias linhas de investigacao.
+Pode ser usado de duas formas:
 
-O Terra Lead deve mandar uma parcela grande do trabalho paralelo e verificavel para DeepSeek e reservar Luna XHigh para caminho critico, integracoes delicadas, falha do DeepSeek ou preferencia explicita do usuario.
+### Manual
 
-## Anti-padroes
+O usuario seleciona `terra-planner`, pede planejamento e depois volta para `luna-lead` para execucao.
 
-- Chamar advisor para tarefa mecanica.
-- Deixar dois workers editarem a mesma area sem coordenacao.
-- Criar workers com escopo vago.
-- Insistir indefinidamente no modelo barato quando a evidencia aponta para escalonamento.
-- Tratar automaticamente todo codigo privado ou log real como proibido para DeepSeek.
+### Automatico
 
-## Principio operacional
+O Luna Lead percebe que o plano precisa ser revisto e chama `terra-planner` como subagente. Terra devolve um plano atualizado e o Luna continua a entrega.
 
-Otimize por **trabalho correto por unidade de quota**, nao por prestigio do modelo.
+O Terra Planner nao deve virar gerente permanente.
+
+## Checkpoints recomendados
+
+Chame Terra Planner ou Strategic Advisor quando ocorrer:
+
+- mudanca estrutural de escopo;
+- nova dependencia relevante;
+- premissa importante invalidada;
+- risco operacional maior que o previsto;
+- mudanca dificil de reverter;
+- fase critica antes de producao;
+- necessidade de reavaliar arquitetura.
+
+## Pacote de evidencia
+
+Antes de escalar para Terra, o Luna Lead deve condensar:
+
+```text
+Objetivo
+Ambiente/topologia
+Sintoma
+Linha do tempo
+Evidencias essenciais
+Mudancas recentes
+Hipoteses
+Testes executados
+Resultados
+Restricoes
+Risco
+Rollback
+Recomendacao preliminar
+```
+
+Isso reduz contexto caro e melhora a qualidade da consulta.
