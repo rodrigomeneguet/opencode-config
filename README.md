@@ -1,70 +1,165 @@
 # opencode-config
 
-Configuracao pessoal de orquestracao para OpenCode, otimizada para infraestrutura, troubleshooting e projetos de software com foco em qualidade por unidade de quota.
+Configuracao pessoal do OpenCode orientada a **otimizacao de quota**, com roteamento por **custo, risco, privacidade e tipo de dificuldade**.
 
-## Arquitetura
+A ideia central e simples:
 
-### Fluxo padrao
+> Quase tudo comeca no Luna. O Luna Lead continua dono da execucao e escala apenas quando o motivo da dificuldade justificar.
+
+## Arquitetura v2.1
+
+### Execucao padrao
 
 ```text
-Luna Operator (Medium)
-├── DeepSeek Worker (Free)    -> capacidade elastica para alto volume
-├── Luna Worker (XHigh)       -> worker premium / caminho critico
-├── Terra Diagnostician       -> RCA e correlacao entre camadas
-└── Strategic Advisor (Terra) -> arquitetura, seguranca, risco e rollback
+                         ┌─ DeepSeek Free
+                         │
+                         ├─ Luna High
+Luna Lead Medium ────────┼─ Luna XHigh
+   execucao continua     │
+                         ├─ Terra Diagnostician Low
+                         │
+                         ├─ Terra Planner Low
+                         │
+                         └─ Strategic Advisor Terra Medium
 ```
+
+O `luna-lead` e o default. Ele acompanha plano, tarefas, workers, integracao, testes e entrega final.
+
+Ele nao escala simplesmente porque algo ficou "dificil". Ele escala conforme **por que** ficou dificil:
+
+| Situacao | Rota |
+| --- | --- |
+| Trabalho independente, paralelo e validavel | `deepseek-worker` |
+| Execucao importante e bem definida | `luna-worker` High |
+| Problema bem definido, mas High nao foi suficiente | `luna-worker-xhigh` |
+| Problema mal enquadrado, multi-camada ou circular | `terra-diagnostician` Low |
+| Projeto amplo precisa de plano/replanejamento | `terra-planner` Low |
+| Arquitetura, risco, seguranca ou trade-offs | `strategic-advisor` Terra Medium |
 
 ### Projeto grande
 
+O Terra nao precisa ficar sentado em todas as rodadas da execucao.
+
 ```text
-Terra Lead (Medium)
-├── DeepSeek Worker (Free)
-├── Luna Worker (XHigh)
-└── Strategic Advisor (Terra Medium; promovivel a Sol)
+Terra Planner Low
+       │
+       │ plano / checkpoint
+       ▼
+Luna Lead Medium
+       │
+       ├─ DeepSeek Free
+       ├─ Luna High
+       ├─ Luna XHigh
+       ├─ Terra Diagnostician Low
+       └─ Strategic Advisor Terra Medium
 ```
 
-A regra principal e simples: **comece no Luna, use DeepSeek agressivamente para absorver volume e escale para Luna/Terra quando criticidade, integracao ou qualidade justificarem**.
+Fluxo recomendado:
+
+1. use `terra-planner` quando o projeto ainda estiver nebuloso;
+2. Terra cria arquitetura, fases, dependencias, validacao e rollback;
+3. Luna Lead assume a execucao;
+4. Luna delega e integra as entregas;
+5. se o plano deixar de fazer sentido, Luna pode chamar `terra-planner` novamente;
+6. Terra devolve o plano revisado e Luna continua a execucao.
+
+O usuario tambem pode selecionar `terra-planner` manualmente. Ele usa `mode: all`, portanto funciona como agente selecionavel e como subagente do Luna Lead.
 
 ## Agentes
 
-| Agente | Modelo | Papel |
-| --- | --- | --- |
-| `luna-operator` | GPT-5.6 Luna Medium | Primario padrao para infra e codigo |
-| `deepseek-worker` | DeepSeek V4 Flash Free | Capacidade elastica gratuita para exploracao, implementacao, logs, testes e revisao |
-| `luna-worker` | GPT-5.6 Luna XHigh | Worker premium para caminho critico e alta integracao |
-| `terra-diagnostician` | GPT-5.6 Terra Medium | RCA, logs e diagnostico multi-camada |
-| `terra-lead` | GPT-5.6 Terra Medium | Primario opcional para projetos grandes |
-| `strategic-advisor` | GPT-5.6 Terra Medium | Advisor somente leitura para arquitetura e risco |
+### `luna-lead`
 
-O advisor tem nome de papel, nao de modelo. Quando a criticidade justificar, altere apenas o frontmatter de `strategic-advisor.md` para `openai/gpt-5.6-sol` e ajuste o `reasoningEffort`.
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** Medium
+- **papel:** lider de execucao
+- **status:** default
 
-## DeepSeek Free: politica permissiva
+E o dono operacional da sessao. Resolve o que for simples, escolhe workers, valida entregas e decide quando escalar.
 
-O `deepseek-worker` deve ser usado de forma agressiva para reduzir consumo da quota OpenAI.
+### `deepseek-worker`
 
-Repositorios privados, codigo privado, logs reais e configuracoes internas **nao sao automaticamente excluidos** do DeepSeek.
+- **modelo:** DeepSeek V4 Flash Free
+- **papel:** capacidade elastica gratuita
 
-Se aparecerem credenciais ou segredos evidentes, a preferencia e mascarar ou remover somente os valores sensiveis e continuar usando o worker gratuito no restante da tarefa quando possivel.
+Bom para exploracao, leitura, testes, documentacao, inventario, revisao independente, busca de padroes e tarefas objetivamente validaveis.
 
-Exemplos de bons usos:
+Nao envie credenciais literais ou segredos desnecessariamente.
 
-- exploracao de codebase;
-- debugging;
-- leitura e correlacao de logs;
-- revisao de configuracoes;
-- testes;
-- documentacao;
-- refatoracoes delimitadas;
-- implementacoes isoladas;
-- revisao de diff;
-- Terraform, Ansible, Docker, Kubernetes e scripts;
-- investigacoes paralelas e segunda opiniao.
+### `luna-worker`
 
-Para uma tarefa, projeto ou ambiente em que voce prefira manter o trabalho no ecossistema OpenAI, basta instruir `luna-operator` ou `terra-lead` a **preferir `luna-worker`**. Essa preferencia manual tem prioridade sobre o roteamento economico.
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** High
+- **papel:** worker premium normal
 
-## Skills sob demanda
+Caminho padrao para implementacoes importantes, integracao e troubleshooting bem enquadrado.
 
-Os antigos agentes de papel fixo foram removidos. Em vez de manter `devops`, `backend`, `frontend`, `qa` e `cybersecurity` como agentes permanentes, o conhecimento especializado fica em skills carregadas quando necessario:
+### `luna-worker-xhigh`
+
+- **modelo:** GPT-5.6 Luna
+- **reasoning:** XHigh
+- **hidden:** true
+
+Nao aparece no seletor normal. O Luna Lead pode chama-lo quando o problema ja estiver bem definido, mas Luna High nao tiver profundidade suficiente.
+
+A ideia e espremer o Luna antes de pagar Terra quando o gargalo for profundidade, nao capacidade de enquadramento.
+
+### `terra-diagnostician`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Low
+- **papel:** RCA e diagnostico multi-camada
+
+Primeiro salto de capacidade quando o problema envolve varias hipoteses, cronologia, varias camadas ou diagnostico circular.
+
+### `terra-planner`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Low
+- **mode:** all
+- **papel:** planejamento e checkpoints
+
+Planeja projetos grandes e replaneja quando o contexto muda. Nao deve gerenciar a execucao rotineira.
+
+### `strategic-advisor`
+
+- **modelo:** GPT-5.6 Terra
+- **reasoning:** Medium
+- **papel:** arquitetura, seguranca, risco e revisao critica
+
+O papel e desacoplado do motor. Para uma revisao excepcionalmente importante, ele pode ser promovido temporariamente para Sol sem alterar a arquitetura.
+
+## Escada de capacidade
+
+```text
+DeepSeek Free
+      │
+      ├─ volume e paralelismo
+      ▼
+Luna High
+      │
+      ├─ problema bem definido, precisa de mais profundidade
+      ▼
+Luna XHigh
+      │
+      ├─ problema esta mal enquadrado / multi-camada
+      ▼
+Terra Low
+      │
+      ├─ arquitetura / risco / julgamento
+      ▼
+Terra Medium
+      │
+      └─ excepcionalmente: Sol
+```
+
+Essa escada **nao e totalmente linear**. Luna XHigh e Terra Low resolvem problemas diferentes:
+
+- XHigh: mais profundidade no mesmo enquadramento;
+- Terra: salto de capacidade quando o enquadramento ou julgamento e o gargalo.
+
+## Skills
+
+As antigas personas fixas de Backend, Frontend, DevOps, QA e Cybersecurity foram removidas. O conhecimento util foi preservado como skills sob demanda:
 
 - `infra-operations`
 - `security-review`
@@ -72,56 +167,36 @@ Os antigos agentes de papel fixo foram removidos. Em vez de manter `devops`, `ba
 - `backend-engineering`
 - `frontend-engineering`
 
-Isso reduz poluicao no menu de agentes e separa **responsabilidade de orquestracao** de **especialidade de dominio**.
+Isso reduz poluicao no seletor de agentes.
 
 ## Estrutura
 
 ```text
-opencode-config/
-├── opencode.json
-├── setup.sh
-├── .env.example
-├── .opencode/
-│   ├── agents/
-│   │   ├── luna-operator.md
-│   │   ├── deepseek-worker.md
-│   │   ├── luna-worker.md
-│   │   ├── terra-diagnostician.md
-│   │   ├── terra-lead.md
-│   │   └── strategic-advisor.md
-│   └── skills/
-│       ├── infra-operations/SKILL.md
-│       ├── security-review/SKILL.md
-│       ├── software-testing/SKILL.md
-│       ├── backend-engineering/SKILL.md
-│       └── frontend-engineering/SKILL.md
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── ROUTING.md
-│   └── COST-STRATEGY.md
-└── scripts/
-    └── validate.sh
-```
+.opencode/
+├── agents/
+│   ├── luna-lead.md
+│   ├── terra-planner.md
+│   ├── deepseek-worker.md
+│   ├── luna-worker.md
+│   ├── luna-worker-xhigh.md
+│   ├── terra-diagnostician.md
+│   └── strategic-advisor.md
+└── skills/
+    ├── infra-operations/
+    ├── security-review/
+    ├── software-testing/
+    ├── backend-engineering/
+    └── frontend-engineering/
 
-## Pre-requisitos
+docs/
+├── ARCHITECTURE.md
+├── ROUTING.md
+└── COST-STRATEGY.md
 
-- OpenCode atualizado;
-- Node.js/npm para os MCPs locais;
-- acesso/autenticacao aos provedores OpenAI e OpenCode Zen;
-- Git para sincronizar a configuracao.
-
-Confirme os modelos disponiveis:
-
-```bash
-opencode models
-```
-
-Modelos esperados nesta configuracao:
-
-```text
-openai/gpt-5.6-luna
-openai/gpt-5.6-terra
-opencode/deepseek-v4-flash-free
+opencode.json
+setup.sh
+scripts/validate.sh
+.env.example
 ```
 
 ## Instalacao
@@ -129,65 +204,60 @@ opencode/deepseek-v4-flash-free
 ```bash
 git clone https://github.com/rodrigomeneguet/opencode-config.git
 cd opencode-config
+git checkout feat/orchestration-v2
 bash setup.sh
 ```
 
-Modos:
+Modos do instalador:
 
 ```bash
-bash setup.sh              # global, interativo
-bash setup.sh --auto       # global, sem perguntas
-bash setup.sh --merge      # instala apenas o que estiver ausente
-bash setup.sh --symlink    # global com symlinks para facilitar git pull
+bash setup.sh              # global interativo
+bash setup.sh --auto       # global automatico
+bash setup.sh --merge      # preserva arquivos existentes
+bash setup.sh --symlink    # global usando symlinks
 bash setup.sh --project    # instala no projeto atual
 ```
 
-A instalacao global usa:
+O setup tambem remove nomes legados gerenciados por este repositorio, incluindo:
 
 ```text
-~/.config/opencode/opencode.json
-~/.config/opencode/agents/
-~/.config/opencode/skills/
+backend
+frontend
+devops
+qa-engineer
+cybersecurity
+luna-operator
+terra-lead
 ```
 
-O modo `--project` usa:
+Ele nao remove agentes customizados desconhecidos.
 
-```text
-./opencode.json
-./.opencode/agents/
-./.opencode/skills/
-```
-
-## MCPs e segredos
-
-Brave Search, GitHub, Git History e Memory Graph ficam no mesmo `opencode.json` principal. As credenciais sao referenciadas por variaveis de ambiente e nao ficam gravadas no repositorio:
+## Variaveis de ambiente
 
 ```bash
 export BRAVE_API_KEY="..."
 export GITHUB_PERSONAL_ACCESS_TOKEN="..."
 ```
 
-O OpenCode substitui `{env:VARIAVEL}` em tempo de execucao.
-
-## Politica de roteamento
-
-1. Luna Operator mantem o contexto principal e resolve tarefas pequenas.
-2. DeepSeek recebe agressivamente trabalho tecnico delegavel e validavel.
-3. Luna Worker XHigh recebe caminho critico, alta integracao, fallback de qualidade ou preferencia explicita.
-4. Terra Diagnostician entra quando a causa nao e clara ou atravessa camadas.
-5. Strategic Advisor entra nos portoes de arquitetura, seguranca, blast radius e rollback.
-6. Terra Lead e selecionado manualmente quando o trabalho vira um projeto multi-frente.
-
-Detalhes em [`docs/ROUTING.md`](docs/ROUTING.md).
+Nunca versione credenciais.
 
 ## Validacao
 
 ```bash
 bash scripts/validate.sh
+opencode models
 ```
 
-O script valida JSON, agentes, skills, roteamento, ausencia de RT Mind legado, referencias de segredos via ambiente e sintaxe do setup.
+Depois abra o OpenCode e valide:
 
-## Filosofia
+1. `luna-lead` aparece como default;
+2. `terra-planner` aparece no seletor;
+3. `luna-worker-xhigh` nao aparece no seletor, mas pode ser chamado pelo Luna Lead;
+4. Luna Lead consegue delegar para DeepSeek, Luna High, Terra Diagnostician, Terra Planner e Strategic Advisor;
+5. os agentes antigos nao aparecem mais.
 
-O objetivo nao e usar sempre o modelo mais forte. O objetivo e usar **o arranjo que conclui mais trabalho correto por unidade de quota**, aproveitando a capacidade gratuita do Zen sempre que ela puder ser validada e escalando apenas quando fizer sentido.
+## Documentacao detalhada
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/ROUTING.md`](docs/ROUTING.md)
+- [`docs/COST-STRATEGY.md`](docs/COST-STRATEGY.md)
