@@ -1,453 +1,134 @@
 #!/usr/bin/env bash
-# setup.sh — Instalacao interativa do opencode-config
-# Detecta config existente, mescla, configura chaves interativamente
-# Uso: bash setup.sh [--auto|--project|--symlink|--merge]
 set -euo pipefail
 
-# ═══════════════════════════════════════════════════════════
-# Configuracao
-# ═══════════════════════════════════════════════════════════
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_DIR="${HOME}/.config/opencode"
-MODE="interactive"  # interactive|auto|project|merge
+GLOBAL_DIR="${HOME}/.config/opencode"
+MODE="interactive"
 USE_SYMLINK=false
 
 for arg in "$@"; do
   case "$arg" in
-    --auto)     MODE="auto" ;;
-    --project)  MODE="project" ;;
-    --symlink)  USE_SYMLINK=true ;;
-    --merge)    MODE="merge" ;;
+    --auto) MODE="auto" ;;
+    --project) MODE="project" ;;
+    --merge) MODE="merge" ;;
+    --symlink) USE_SYMLINK=true ;;
     --help|-h)
-      echo "Uso: bash setup.sh [OPCOES]"
-      echo ""
-      echo "Opcoes:"
-      echo "  (nenhum)    Modo interativo (default)"
-      echo "  --auto      Modo automatico (usa .env ou valores existentes)"
-      echo "  --project   Copia para .opencode/ no diretorio atual"
-      echo "  --symlink   Usa symlinks em vez de copias (global)"
-      echo "  --merge     Apenas merge (nao sobrescreve nada)"
-      echo "  --help      Mostra esta ajuda"
+      cat <<'EOF'
+Uso: bash setup.sh [opcao]
+
+  sem opcao    instalacao global interativa
+  --auto       instalacao global sem perguntas
+  --merge      instala apenas arquivos ausentes
+  --project    instala no projeto atual
+  --symlink    usa symlinks na instalacao global
+  --help       mostra esta ajuda
+EOF
       exit 0
       ;;
+    *) echo "Opcao desconhecida: $arg" >&2; exit 2 ;;
   esac
 done
 
-# ═══════════════════════════════════════════════════════════
-# Cores e helpers
-# ═══════════════════════════════════════════════════════════
-green()  { printf "\033[32m%s\033[0m\n" "$1"; }
-yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
-red()    { printf "\033[31m%s\033[0m\n" "$1"; }
-blue()   { printf "\033[34m%s\033[0m\n" "$1"; }
-bold()   { printf "\033[1m%s\033[0m\n" "$1"; }
+green()  { printf '\033[32m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+red()    { printf '\033[31m%s\033[0m\n' "$1"; }
+blue()   { printf '\033[34m%s\033[0m\n' "$1"; }
 
-ask_yes_no() {
-  local prompt="$1"
-  local default="${2:-y}"
-  local yn
-  if [[ "$MODE" == "auto" ]]; then
+ask_replace() {
+  local target="$1"
+  [[ ! -e "$target" ]] && return 0
+  [[ "$MODE" == "auto" ]] && return 0
+  [[ "$MODE" == "merge" ]] && return 1
+  read -rp "Substituir ${target}? [s/N]: " answer
+  [[ "${answer:-N}" =~ ^[Ss]$ ]]
+}
+
+install_file() {
+  local src="$1" target="$2"
+  mkdir -p "$(dirname "$target")"
+  if ! ask_replace "$target"; then
+    yellow "  preservado: $target"
     return 0
   fi
-  if [[ "$default" == "y" ]]; then
-    read -rp "$prompt [S/n]: " yn
-    yn="${yn:-S}"
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    cp "$target" "${target}.bak"
+  fi
+  if $USE_SYMLINK && [[ "$MODE" != "project" ]]; then
+    ln -sfn "$src" "$target"
   else
-    read -rp "$prompt [s/N]: " yn
-    yn="${yn:-N}"
+    cp "$src" "$target"
   fi
-  [[ "$yn" =~ ^[Ss]$ ]]
+  green "  instalado: $target"
 }
 
-ask_value() {
-  local prompt="$1"
-  local var_name="$2"
-  local silent="${3:-false}"
-  if [[ "$MODE" == "auto" ]]; then
-    return 1
-  fi
-  if [[ "$silent" == "true" ]]; then
-    read -rsp "$prompt: " value
-    echo ""
+install_tree() {
+  local src_dir="$1" target_dir="$2"
+  mkdir -p "$target_dir"
+  while IFS= read -r -d '' src; do
+    local rel="${src#${src_dir}/}"
+    install_file "$src" "${target_dir}/${rel}"
+  done < <(find "$src_dir" -type f -print0)
+}
+
+prepare_mcp_config() {
+  local target="$1"
+  cp "${REPO_DIR}/opencode.jsonc.example" "$target"
+
+  if [[ -z "${BRAVE_API_KEY:-}" ]]; then
+    sed -i '/"brave-search"/,/^[[:space:]]*},[[:space:]]*$/ s/"enabled": true/"enabled": false/' "$target"
+    yellow "  brave-search desabilitado: BRAVE_API_KEY nao esta no ambiente"
   else
-    read -rp "$prompt: " value
+    green "  brave-search habilitado"
   fi
-  if [[ -n "$value" ]]; then
-    eval "$var_name='$value'"
-    return 0
-  fi
-  return 1
-}
 
-# ═══════════════════════════════════════════════════════════
-# Carregar .env existente
-# ═══════════════════════════════════════════════════════════
-load_env() {
-  local env_file="$1"
-  if [[ -f "$env_file" ]]; then
-    while IFS= read -r line; do
-      if [[ "$line" =~ ^[A-Z_]+=.+$ ]]; then
-        local key="${line%%=*}"
-        local val="${line#*=}"
-        export "$key"="$val" 2>/dev/null || true
-      fi
-    done < "$env_file"
+  if [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+    sed -i '/"github"/,/^[[:space:]]*},[[:space:]]*$/ s/"enabled": true/"enabled": false/' "$target"
+    yellow "  github MCP desabilitado: GITHUB_PERSONAL_ACCESS_TOKEN nao esta no ambiente"
+  else
+    green "  github MCP habilitado"
   fi
 }
-
-# ═══════════════════════════════════════════════════════════
-# Header
-# ═══════════════════════════════════════════════════════════
-echo ""
-bold "╔═══════════════════════════════════════════════════╗"
-bold "║        opencode-config — Instalacao              ║"
-bold "╚═══════════════════════════════════════════════════╝"
-echo ""
-blue "Modo: ${MODE}"
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 1: Detectar instalacao existente
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 1: Detectando configuracao existente ──"
-
-EXISTING_PROVIDER=""
-EXISTING_MCPS=""
-EXISTING_ENV=""
-
-if [[ -f "${CONFIG_DIR}/opencode.json" ]]; then
-  green "  ✓ opencode.json encontrado em ${CONFIG_DIR}/"
-  EXISTING_PROVIDER=$(cat "${CONFIG_DIR}/opencode.json" 2>/dev/null || echo "")
-fi
-
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  green "  ✓ opencode.jsonc encontrado em ${CONFIG_DIR}/"
-  EXISTING_MCPS=$(cat "${CONFIG_DIR}/opencode.jsonc" 2>/dev/null || echo "")
-fi
-
-if [[ -f "${CONFIG_DIR}/.env" ]]; then
-  green "  ✓ .env encontrado em ${CONFIG_DIR}/"
-  EXISTING_ENV="exists"
-  load_env "${CONFIG_DIR}/.env"
-fi
-
-if [[ -z "$EXISTING_PROVIDER" && -z "$EXISTING_MCPS" && -z "$EXISTING_ENV" ]]; then
-  yellow "  ⚠ Nenhuma configuracao existente encontrada — instalacao limpa"
-fi
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 2: Merge de configuracao
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 2: Merge de configuracao ──"
 
 if [[ "$MODE" == "project" ]]; then
-  blue "  Modo projeto: copiando para .opencode/ no CWD"
-  TARGET_DIR="$(pwd)/.opencode"
-  mkdir -p "${TARGET_DIR}/agents"
-
-  for agent in "${REPO_DIR}"/.opencode/agents/*.md; do
-    filename="$(basename "$agent")"
-    if ${USE_SYMLINK}; then
-      ln -sf "$agent" "${TARGET_DIR}/agents/${filename}"
-    else
-      cp -u "$agent" "${TARGET_DIR}/agents/${filename}"
-    fi
-    green "  ✓ ${filename}"
-  done
-
-  if [[ ! -f "$(pwd)/opencode.json" ]]; then
-    cp "${REPO_DIR}/opencode.json" "$(pwd)/opencode.json"
-    green "  ✓ opencode.json copiado"
-  else
-    yellow "  ⚠ opencode.json ja existe no projeto"
-  fi
-
-  # Copiar MCP config se nao existir
-  if [[ ! -f "$(pwd)/opencode.jsonc" ]]; then
-    cp "${REPO_DIR}/opencode.jsonc.example" "$(pwd)/opencode.jsonc"
-    green "  ✓ opencode.jsonc criado (edite com suas chaves)"
-  fi
-
-  echo ""
-  green "  Instalacao de projeto concluida!"
-  echo ""
-  exit 0
-fi
-
-# Modo global: merge provider
-if [[ -n "$EXISTING_PROVIDER" ]]; then
-  yellow "  Configuracao de provider existente detectada"
-  if ask_yes_no "  Deseja substituir pelo provider do repo (rt-vllm/Qwen)?"; then
-    mkdir -p "${CONFIG_DIR}"
-    if ${USE_SYMLINK}; then
-      ln -sf "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
-    else
-      cp "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
-    fi
-    green "  ✓ Provider atualizado"
-  else
-    yellow "  → Provider existente preservado"
+  ROOT="$(pwd)"
+  blue "Instalacao project-level em ${ROOT}"
+  install_file "${REPO_DIR}/opencode.json" "${ROOT}/opencode.json"
+  install_tree "${REPO_DIR}/.opencode/agents" "${ROOT}/.opencode/agents"
+  install_tree "${REPO_DIR}/.opencode/skills" "${ROOT}/.opencode/skills"
+  if [[ ! -e "${ROOT}/opencode.jsonc" || "$MODE" != "merge" ]]; then
+    prepare_mcp_config "${ROOT}/opencode.jsonc"
   fi
 else
-  mkdir -p "${CONFIG_DIR}"
-  if ${USE_SYMLINK}; then
-    ln -sf "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
+  blue "Instalacao global em ${GLOBAL_DIR}"
+  mkdir -p "$GLOBAL_DIR"
+  install_file "${REPO_DIR}/opencode.json" "${GLOBAL_DIR}/opencode.json"
+  install_tree "${REPO_DIR}/.opencode/agents" "${GLOBAL_DIR}/agents"
+  install_tree "${REPO_DIR}/.opencode/skills" "${GLOBAL_DIR}/skills"
+
+  MCP_TARGET="${GLOBAL_DIR}/opencode.jsonc"
+  if ask_replace "$MCP_TARGET"; then
+    [[ -e "$MCP_TARGET" ]] && cp "$MCP_TARGET" "${MCP_TARGET}.bak"
+    prepare_mcp_config "$MCP_TARGET"
+    green "  instalado: $MCP_TARGET"
   else
-    cp "${REPO_DIR}/opencode.json" "${CONFIG_DIR}/opencode.json"
+    yellow "  preservado: $MCP_TARGET"
   fi
-  green "  ✓ opencode.json instalado"
-fi
-
-# Merge agentes
-blue "  Instalando agentes..."
-mkdir -p "${CONFIG_DIR}/.opencode/agents"
-for agent in "${REPO_DIR}"/.opencode/agents/*.md; do
-  filename="$(basename "$agent")"
-  if ${USE_SYMLINK}; then
-    ln -sf "$agent" "${CONFIG_DIR}/.opencode/agents/${filename}"
-  else
-    cp -u "$agent" "${CONFIG_DIR}/.opencode/agents/${filename}"
-  fi
-  green "  ✓ ${filename}"
-done
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 3: Configuracao de chaves
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 3: Configuracao de chaves de API ──"
-
-# Variaveis obrigatorias
-declare -A REQUIRED_KEYS=(
-  ["BRAVE_API_KEY"]="obrigatoria"
-)
-
-# Variaveis opcionais
-declare -A OPTIONAL_KEYS=(
-  ["GITHUB_PERSONAL_ACCESS_TOKEN"]="recomendada (para GitHub MCP)"
-)
-
-configure_key() {
-  local key="$1"
-  local desc="$2"
-  local current_value="${!key:-}"
-
-  # Ja tem valor?
-  if [[ -n "$current_value" ]]; then
-    local masked="${current_value:0:4}****${current_value: -4}"
-    green "  ✓ ${key}: ${masked}"
-    if [[ "$MODE" != "auto" ]]; then
-      if ask_yes_no "    Deseja alterar ${key}?"; then
-        if ask_value "    Novo valor para ${key}" "new_val" true; then
-          export "$key"="$new_val"
-          green "    → ${key} atualizada"
-        fi
-      fi
-    fi
-    return 0
-  fi
-
-  # Nao tem valor — perguntar
-  yellow "  ⚠ ${key} nao configurada"
-  if [[ "$desc" == "obrigatoria" ]]; then
-    blue "    (${desc}: necessaria para Brave Search MCP)"
-  else
-    blue "    (${desc})"
-  fi
-
-  if [[ "$MODE" == "auto" ]]; then
-    red "    ✗ ${key} ausente — modo auto nao pode configurar"
-    return 1
-  fi
-
-  if ask_yes_no "    Deseja configurar ${key} agora?"; then
-    if ask_value "    Digite o valor de ${key}" "new_val" true; then
-      export "$key"="$new_val"
-      green "    → ${key} configurada"
-      return 0
-    else
-      red "    ✗ Valor vazio — ${key} nao configurada"
-      return 1
-    fi
-  else
-    yellow "    → ${key} pulada"
-    return 1
-  fi
-}
-
-MISSING_KEYS=0
-BRAVE_CONFIGURED=false
-GITHUB_CONFIGURED=false
-
-for key in "${!REQUIRED_KEYS[@]}"; do
-  if ! configure_key "$key" "${REQUIRED_KEYS[$key]}"; then
-    MISSING_KEYS=$((MISSING_KEYS + 1))
-  else
-    BRAVE_CONFIGURED=true
-  fi
-done
-
-for key in "${!OPTIONAL_KEYS[@]}"; do
-  if configure_key "$key" "${OPTIONAL_KEYS[$key]}"; then
-    GITHUB_CONFIGURED=true
-  fi
-done
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 4: Gerar arquivos
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 4: Gerando arquivos de configuracao ──"
-
-# Gerar opencode.jsonc
-blue "  Gerando opencode.jsonc..."
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  cp "${CONFIG_DIR}/opencode.jsonc" "${CONFIG_DIR}/opencode.jsonc.bak"
-  yellow "  → Backup: opencode.jsonc.bak"
-fi
-
-# Copiar template
-cp "${REPO_DIR}/opencode.jsonc.example" "${CONFIG_DIR}/opencode.jsonc"
-
-# Substituir placeholders e desabilitar MCPs sem chave
-if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
-  sed -i "s/{YOUR_BRAVE_API_KEY}/${BRAVE_API_KEY}/g" "${CONFIG_DIR}/opencode.jsonc"
-  green "  ✓ brave-search: habilitado"
-else
-  # Desabilitar brave-search (linha 8 do template)
-  sed -i '/brave-search/,/enabled/{
-    /"enabled": true/s/"enabled": true/"enabled": false/
-  }' "${CONFIG_DIR}/opencode.jsonc"
-  yellow "  ⚠ brave-search: desabilitado (chave ausente)"
-fi
-
-if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
-  sed -i "s/{YOUR_GITHUB_TOKEN}/${GITHUB_PERSONAL_ACCESS_TOKEN}/g" "${CONFIG_DIR}/opencode.jsonc"
-  green "  ✓ github: habilitado"
-else
-  # Desabilitar github (proximo "enabled": true apos github)
-  sed -i '/github/,/enabled/{
-    /"enabled": true/s/"enabled": true/"enabled": false/
-  }' "${CONFIG_DIR}/opencode.jsonc"
-  yellow "  ⚠ github: desabilitado (chave ausente)"
-fi
-
-# Gerar .env
-blue "  Gerando .env..."
-cat > "${CONFIG_DIR}/.env" << EOF
-# Variaveis de ambiente para opencode-config
-# Gerado por setup.sh em $(date '+%Y-%m-%d %H:%M:%S')
-
-BRAVE_API_KEY=${BRAVE_API_KEY:-}
-GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
-EOF
-green "  ✓ .env gerado"
-echo ""
-
-# ═══════════════════════════════════════════════════════════
-# FASE 5: Verificacao final
-# ═══════════════════════════════════════════════════════════
-bold "── Fase 5: Verificacao final ──"
-
-ERRORS=0
-
-# Verificar opencode.json
-if [[ -f "${CONFIG_DIR}/opencode.json" ]]; then
-  if node -e "JSON.parse(require('fs').readFileSync('${CONFIG_DIR}/opencode.json','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.json: valido"
-  else
-    red "  ✗ opencode.json: JSON invalido"
-    ERRORS=$((ERRORS + 1))
-  fi
-else
-  red "  ✗ opencode.json: nao encontrado"
-  ERRORS=$((ERRORS + 1))
-fi
-
-# Verificar opencode.jsonc
-if [[ -f "${CONFIG_DIR}/opencode.jsonc" ]]; then
-  if node -e "JSON.parse(require('fs').readFileSync('${CONFIG_DIR}/opencode.jsonc','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.jsonc: valido"
-  else
-    red "  ✗ opencode.jsonc: JSON invalido"
-    ERRORS=$((ERRORS + 1))
-  fi
-else
-  red "  ✗ opencode.jsonc: nao encontrado"
-  ERRORS=$((ERRORS + 1))
-fi
-
-# Verificar chaves
-for key in "${!REQUIRED_KEYS[@]}"; do
-  if [[ -n "${!key:-}" ]]; then
-    green "  ✓ ${key}: configurada"
-  else
-    yellow "  ⚠ ${key}: ausente (brave-search desabilitado)"
-  fi
-done
-
-for key in "${!OPTIONAL_KEYS[@]}"; do
-  if [[ -n "${!key:-}" ]]; then
-    green "  ✓ ${key}: configurada"
-  else
-    yellow "  ⚠ ${key}: ausente (github desabilitado)"
-  fi
-done
-
-# Verificar MCPs
-echo ""
-blue "  Status dos MCPs:"
-if [[ "$BRAVE_CONFIGURED" == "true" ]]; then
-  green "    ✓ brave-search: ativo"
-else
-  yellow "    ⚠ brave-search: inativo (execute setup.sh para configurar)"
-fi
-if [[ "$GITHUB_CONFIGURED" == "true" ]]; then
-  green "    ✓ github: ativo"
-else
-  yellow "    ⚠ github: inativo (execute setup.sh para configurar)"
-fi
-green "    ✓ git: ativo"
-green "    ✓ memory: ativo"
-
-# Verificar agentes
-AGENT_COUNT=$(ls -1 "${CONFIG_DIR}/.opencode/agents/"*.md 2>/dev/null | wc -l)
-if [[ "$AGENT_COUNT" -gt 0 ]]; then
-  green "  ✓ ${AGENT_COUNT} agente(s) instalado(s)"
-else
-  red "  ✗ Nenhum agente encontrado"
-  ERRORS=$((ERRORS + 1))
 fi
 
 echo ""
-
-# ═══════════════════════════════════════════════════════════
-# Resumo
-# ═══════════════════════════════════════════════════════════
-if [[ $ERRORS -eq 0 ]]; then
-  bold "╔═══════════════════════════════════════════════════╗"
-  green "║       ✓ Instalacao concluida com sucesso!       ║"
-  bold "╚═══════════════════════════════════════════════════╝"
-  echo ""
-  echo "  Arquivos instalados em: ${CONFIG_DIR}/"
-  echo ""
-  if [[ "$BRAVE_CONFIGURED" == "false" || "$GITHUB_CONFIGURED" == "false" ]]; then
-    echo "  MCPs parciais (chaves ausentes):"
-    [[ "$BRAVE_CONFIGURED" == "false" ]] && echo "    - brave-search: Execute setup.sh para adicionar a chave"
-    [[ "$GITHUB_CONFIGURED" == "false" ]] && echo "    - github: Execute setup.sh para adicionar o token"
-    echo ""
-  fi
-  echo "  Proximos passos:"
-  echo "    1. Reinicie o OpenCode"
-  echo "    2. Teste: @qa-engineer ola"
-  echo ""
+blue "Validando repositorio..."
+if bash "${REPO_DIR}/scripts/validate.sh"; then
+  green "Configuracao instalada e validada."
 else
-  bold "╔═══════════════════════════════════════════════════╗"
-  red "║    ✗ Instalacao com erros (${ERRORS} erro(s))           ║"
-  bold "╚═══════════════════════════════════════════════════╝"
-  echo ""
-  echo "  Corrija os erros acima e execute novamente."
-  echo ""
+  red "A validacao encontrou problemas. Revise a saida acima."
   exit 1
 fi
+
+echo ""
+echo "Modelos esperados:"
+echo "  openai/gpt-5.6-luna"
+echo "  openai/gpt-5.6-terra"
+echo "  opencode/deepseek-v4-flash-free"
+echo ""
+echo "Confirme com: opencode models"
+echo "Autenticacao: use 'opencode auth login' para OpenAI/OpenCode Zen quando necessario."
