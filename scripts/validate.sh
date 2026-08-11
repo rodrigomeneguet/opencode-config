@@ -14,40 +14,26 @@ fail() { red "  ✗ $1"; ERRORS=$((ERRORS + 1)); }
 warn() { yellow "  ⚠ $1"; WARNINGS=$((WARNINGS + 1)); }
 pass() { green "  ✓ $1"; }
 
-EXPECTED_AGENTS=(
-  luna-operator
-  luna-worker
-  deepseek-worker
-  terra-diagnostician
-  terra-lead
-  strategic-advisor
-)
-
-EXPECTED_SKILLS=(
-  infra-operations
-  security-review
-  software-testing
-  backend-engineering
-  frontend-engineering
-)
+EXPECTED_AGENTS=(luna-operator luna-worker deepseek-worker terra-diagnostician terra-lead strategic-advisor)
+EXPECTED_SKILLS=(infra-operations security-review software-testing backend-engineering frontend-engineering)
 
 echo "============================================="
 echo "  opencode-config v2 - validacao"
 echo "============================================="
 
 blue "[1/8] JSON"
-for file in opencode.json opencode.jsonc.example; do
-  if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/${file}','utf8'))" 2>/dev/null; then
-    pass "$file valido"
-  else
-    fail "$file invalido"
-  fi
-done
+if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8'))" 2>/dev/null; then
+  pass "opencode.json valido"
+else
+  fail "opencode.json invalido"
+fi
 
-blue "[2/8] Configuracao de modelos"
+blue "[2/8] Configuracao de modelos e MCP"
 if grep -q 'openai/gpt-5.6-luna' "${REPO_DIR}/opencode.json"; then pass "Luna configurado"; else fail "Luna ausente"; fi
 if grep -q '"default_agent": "luna-operator"' "${REPO_DIR}/opencode.json"; then pass "luna-operator e o default"; else fail "default_agent incorreto"; fi
 if grep -q 'rt-vllm\|Qwen3\.5\|Qwen3\.6' "${REPO_DIR}/opencode.json"; then fail "RT Mind/Qwen legado ainda presente"; else pass "RT Mind removido"; fi
+if grep -q '{env:BRAVE_API_KEY}' "${REPO_DIR}/opencode.json"; then pass "Brave usa env"; else fail "Brave nao usa env"; fi
+if grep -q '{env:GITHUB_PERSONAL_ACCESS_TOKEN}' "${REPO_DIR}/opencode.json"; then pass "GitHub usa env"; else fail "GitHub nao usa env"; fi
 
 blue "[3/8] Agentes"
 for name in "${EXPECTED_AGENTS[@]}"; do
@@ -75,21 +61,14 @@ if grep -qi 'nao processe segredos' "${REPO_DIR}/.opencode/agents/deepseek-worke
 if grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker.md"; then pass "Luna worker em xhigh"; else warn "Luna worker nao esta em xhigh"; fi
 if grep -q 'model: openai/gpt-5.6-terra' "${REPO_DIR}/.opencode/agents/strategic-advisor.md"; then pass "advisor em Terra"; else warn "advisor usa outro motor"; fi
 
-blue "[6/8] Segredos e MCP"
-if grep -q '{env:BRAVE_API_KEY}' "${REPO_DIR}/opencode.jsonc.example"; then pass "Brave usa env"; else fail "Brave nao usa env"; fi
-if grep -q '{env:GITHUB_PERSONAL_ACCESS_TOKEN}' "${REPO_DIR}/opencode.jsonc.example"; then pass "GitHub usa env"; else fail "GitHub nao usa env"; fi
+blue "[6/8] Segredos"
 if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
 
 blue "[7/8] setup.sh"
 if bash -n "${REPO_DIR}/setup.sh"; then pass "sintaxe valida"; else fail "erro de sintaxe"; fi
 
 blue "[8/8] MCP packages"
-MCP_PACKAGES=(
-  '@brave/brave-search-mcp-server'
-  '@modelcontextprotocol/server-github'
-  '@cyanheads/git-mcp-server'
-  '@modelcontextprotocol/server-memory'
-)
+MCP_PACKAGES=('@brave/brave-search-mcp-server' '@modelcontextprotocol/server-github' '@cyanheads/git-mcp-server' '@modelcontextprotocol/server-memory')
 if command -v npm >/dev/null 2>&1; then
   for pkg in "${MCP_PACKAGES[@]}"; do
     if npm view "$pkg" version >/dev/null 2>&1; then pass "$pkg disponivel"; else warn "$pkg nao verificado no npm"; fi
