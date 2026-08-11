@@ -4,30 +4,41 @@
 
 Tudo comeca no `luna-operator`.
 
-Escalar nao e premio por dificuldade percebida. Escale quando houver evidencia de que outro papel reduz risco, tentativas ou custo total.
+O objetivo e economizar quota OpenAI sem sacrificar controle. Por isso, `deepseek-worker` deve ser usado agressivamente como primeira opcao de worker sempre que a tarefa puder ser revisada ou validada depois.
 
 ## DeepSeek Worker
 
-Use quando todas as condicoes abaixo forem verdadeiras:
+Use amplamente para:
 
-- tarefa independente;
-- baixo risco;
-- resultado objetivamente validavel;
-- dados nao sensiveis ou sanitizados;
-- erro do worker nao compromete producao ou caminho critico.
+- exploracao de codebase;
+- leitura e correlacao de logs;
+- revisao de configuracoes;
+- testes;
+- documentacao;
+- debugging;
+- refatoracoes delimitadas;
+- implementacoes isoladas;
+- revisao de diff;
+- scripts e IaC;
+- investigacoes paralelas;
+- segunda opiniao.
 
-Exemplos: documentacao, testes, exploracao de codigo publico/pessoal nao sensivel, busca de padroes, revisao independente, pequenas implementacoes isoladas.
+Repositorios privados, codigo privado, logs reais e configuracoes internas NAO sao automaticamente motivos para evitar o DeepSeek.
+
+Se houver credenciais ou segredos evidentes, prefira remover ou mascarar somente os valores sensiveis e continuar delegando o restante do material.
+
+O usuario pode sempre substituir essa regra e pedir explicitamente para uma tarefa, projeto ou ambiente preferir `luna-worker`.
 
 ## Luna Worker XHigh
 
-Use para:
+Use como worker premium quando:
 
-- caminho critico;
-- codigo privado;
-- infraestrutura sensivel;
-- implementacoes integradas;
-- tarefas com alto custo de retrabalho;
-- subtarefas que precisam seguir o plano com muita fidelidade.
+- o usuario pedir explicitamente;
+- a tarefa estiver no caminho critico;
+- houver alta integracao entre componentes;
+- a validacao objetiva for dificil;
+- o impacto de erro for alto;
+- o DeepSeek ja tiver falhado ou entregue resultado insuficiente.
 
 ## Terra Diagnostician
 
@@ -52,6 +63,8 @@ Use quando:
 - ha trade-off de longo prazo;
 - Terra e Luna continuam incertos.
 
+O papel e desacoplado do modelo. Terra Medium e o default atual; promova para Sol quando necessario.
+
 ## Terra Lead
 
 Selecione manualmente quando a tarefa deixa de ser uma intervencao e vira um projeto:
@@ -62,11 +75,16 @@ Selecione manualmente quando a tarefa deixa de ser uma intervencao e vira um pro
 - integracao entre backend, frontend, banco, automacao e observabilidade;
 - incidente complexo com coordenacao de varias linhas de investigacao.
 
+O Terra Lead deve mandar uma parcela grande do trabalho paralelo e verificavel para DeepSeek e reservar Luna XHigh para caminho critico, integracoes delicadas, falha do DeepSeek ou preferencia explicita do usuario.
+
 ## Anti-padroes
 
 - Chamar advisor para tarefa mecanica.
-- Mandar logs inteiros para modelos mais caros sem filtragem inicial.
-- Usar DeepSeek Free com informacao confidencial.
-- Criar workers com escopo vago.
 - Deixar dois workers editarem a mesma area sem coordenacao.
+- Criar workers com escopo vago.
 - Insistir indefinidamente no modelo barato quando a evidencia aponta para escalonamento.
+- Tratar automaticamente todo codigo privado ou log real como proibido para DeepSeek.
+
+## Principio operacional
+
+Otimize por **trabalho correto por unidade de quota**, nao por prestigio do modelo.
