@@ -1,61 +1,104 @@
-# Estrategia de Custo e Qualidade
+# Cost Strategy
 
 ## Objetivo
 
-Otimizar trabalho correto por unidade de quota OpenAI, nao apenas custo por token.
+Maximizar trabalho correto por unidade de quota.
 
-## Ordem economica
+A arquitetura prioriza Luna porque seu custo relativo e muito baixo, mas evita a armadilha de simplesmente aumentar reasoning effort quando o problema real e capacidade de enquadramento.
 
-1. DeepSeek V4 Flash Free para o maximo de trabalho tecnico delegavel e validavel.
-2. Luna Operator Medium como controlador e executor direto de tarefas pequenas.
-3. Luna Worker XHigh como worker premium para caminho critico, alta integracao, fallback de qualidade ou preferencia explicita.
-4. Terra Diagnostician Medium para reduzir incerteza em problemas dificeis.
-5. Terra Lead Medium para coordenar projetos grandes.
-6. Strategic Advisor em Terra Medium por padrao, promovido para Sol apenas quando necessario.
+## Ordem economica conceitual
 
-## DeepSeek como capacidade elastica
+```text
+DeepSeek Free
+      ↓
+Luna Medium / High / XHigh
+      ↓
+Terra Low / Medium
+      ↓
+Sol
+```
 
-A cota gratuita do Zen deve ser tratada como capacidade disponivel e usada agressivamente.
+## Como interpretar essa ordem
 
-Nao desperdice quota OpenAI apenas porque o repositorio e privado, o log e de ambiente real ou a configuracao e interna. Esses fatores, isoladamente, nao devem mudar o roteamento.
+Ela nao significa que toda tarefa deve atravessar todos os degraus.
 
-Quando houver segredos evidentes, prefira mascarar apenas senhas, tokens, API keys, cookies, private keys ou credenciais embutidas e continuar a tarefa com o restante do contexto.
+### Use DeepSeek quando
 
-Se o usuario quiser manter determinado projeto, ambiente ou tarefa no ecossistema OpenAI, ele pode simplesmente pedir ao Luna Operator ou Terra Lead para preferir `luna-worker`.
+- houver muito volume;
+- a subtarefa puder rodar independente;
+- a saida puder ser validada;
+- o risco for baixo.
 
-## Quando pagar Luna XHigh
+### Use Luna High quando
 
-Use quando a economia do DeepSeek deixar de compensar:
+- a tarefa estiver bem definida;
+- a implementacao for importante;
+- a integracao exigir mais fidelidade;
+- o trabalho estiver no caminho critico.
 
-- caminho critico;
-- mudanca fortemente integrada;
-- validacao dificil;
-- impacto operacional alto;
-- continuidade de contexto importante;
-- falha ou baixa qualidade do DeepSeek;
-- preferencia explicita do usuario.
+### Use Luna XHigh quando
 
-## Quando escalar para Terra
+- Luna High nao for suficiente;
+- o problema continuar bem enquadrado;
+- mais profundidade puder resolver o caso sem trocar de familia de modelo.
 
-Escalone quando houver multiplas hipoteses, correlacao entre camadas, raciocinio circular, projeto multi-frente ou quando o custo de retrabalho superar o custo de uma chamada Terra.
+XHigh fica oculto para evitar uso casual, mas o Luna Lead pode chama-lo automaticamente.
 
-## Advisor em Terra por padrao
+### Use Terra Low quando
 
-O `strategic-advisor` usa Terra Medium como configuracao economica. Promova para Sol quando houver revisao arquitetural excepcionalmente complexa, seguranca critica, decisao irreversivel ou quando a discordancia entre agentes continuar material.
+- o problema nao estiver sendo bem enquadrado;
+- houver varias hipoteses concorrentes;
+- varias camadas precisarem ser correlacionadas;
+- o diagnostico estiver circular;
+- um projeto grande precisar de planejamento/replanejamento.
 
-## Medicao sugerida
+## Por que Terra Planner e episodico
 
-Compare configuracoes pela entrega:
+Um coordenador mais caro lendo cada resultado de worker desperdicaria quota em trabalho administrativo.
 
-- numero de intervencoes humanas;
-- tentativas por tarefa;
-- qualidade do diff;
-- testes concluidos;
-- tempo ate validacao;
-- consumo de quota OpenAI;
-- percentual de tarefas absorvidas pelo DeepSeek sem retrabalho;
-- quantidade de escalonamentos Luna -> Terra -> Sol.
+Por isso:
 
-## Principio
+```text
+Terra Planner
+     ↓ plano
+Luna Lead
+     ↓ execucao longa
+Terra Planner
+     ↓ checkpoint apenas se necessario
+Luna Lead
+```
 
-O modelo mais caro nao deve receber trabalho apenas por ser mais forte. Escale quando a probabilidade de retrabalho, erro ou risco justificar o custo adicional.
+A capacidade do Terra e comprada nos momentos em que ela altera uma decisao, nao para acompanhar cada martelada.
+
+## Strategic Advisor
+
+Terra Medium fica reservado para:
+
+- arquitetura;
+- risco;
+- seguranca;
+- blast radius;
+- rollback;
+- decisoes dificeis de reverter;
+- revisao critica.
+
+## Sol
+
+Sol nao faz parte do caminho automatico normal.
+
+A promocao do Strategic Advisor para Sol deve ocorrer manualmente quando o impacto justificar o custo e o nivel de julgamento frontier.
+
+## Regra de otimizacao
+
+> Nao escale modelo porque a tarefa ficou dificil. Escale conforme o motivo da dificuldade.
+
+```text
+volume → DeepSeek
+execucao → Luna High
+profundidade → Luna XHigh
+enquadramento → Terra Low
+arquitetura/risco → Terra Medium
+frontier excepcional → Sol
+```
+
+Essa regra preserva quota sem transformar economia em falsa eficiencia: um modelo barato repetindo tentativas ruins tambem custa tempo e contexto.
