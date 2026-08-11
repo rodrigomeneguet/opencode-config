@@ -70,49 +70,31 @@ install_tree() {
   done < <(find "$src_dir" -type f -print0)
 }
 
-prepare_mcp_config() {
-  local target="$1"
-  cp "${REPO_DIR}/opencode.jsonc.example" "$target"
-
-  if [[ -z "${BRAVE_API_KEY:-}" ]]; then
-    sed -i '/"brave-search"/,/^[[:space:]]*},[[:space:]]*$/ s/"enabled": true/"enabled": false/' "$target"
-    yellow "  brave-search desabilitado: BRAVE_API_KEY nao esta no ambiente"
-  else
-    green "  brave-search habilitado"
-  fi
-
-  if [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
-    sed -i '/"github"/,/^[[:space:]]*},[[:space:]]*$/ s/"enabled": true/"enabled": false/' "$target"
-    yellow "  github MCP desabilitado: GITHUB_PERSONAL_ACCESS_TOKEN nao esta no ambiente"
-  else
-    green "  github MCP habilitado"
-  fi
-}
-
 if [[ "$MODE" == "project" ]]; then
   ROOT="$(pwd)"
   blue "Instalacao project-level em ${ROOT}"
   install_file "${REPO_DIR}/opencode.json" "${ROOT}/opencode.json"
   install_tree "${REPO_DIR}/.opencode/agents" "${ROOT}/.opencode/agents"
   install_tree "${REPO_DIR}/.opencode/skills" "${ROOT}/.opencode/skills"
-  if [[ ! -e "${ROOT}/opencode.jsonc" || "$MODE" != "merge" ]]; then
-    prepare_mcp_config "${ROOT}/opencode.jsonc"
-  fi
 else
   blue "Instalacao global em ${GLOBAL_DIR}"
   mkdir -p "$GLOBAL_DIR"
   install_file "${REPO_DIR}/opencode.json" "${GLOBAL_DIR}/opencode.json"
   install_tree "${REPO_DIR}/.opencode/agents" "${GLOBAL_DIR}/agents"
   install_tree "${REPO_DIR}/.opencode/skills" "${GLOBAL_DIR}/skills"
+fi
 
-  MCP_TARGET="${GLOBAL_DIR}/opencode.jsonc"
-  if ask_replace "$MCP_TARGET"; then
-    [[ -e "$MCP_TARGET" ]] && cp "$MCP_TARGET" "${MCP_TARGET}.bak"
-    prepare_mcp_config "$MCP_TARGET"
-    green "  instalado: $MCP_TARGET"
-  else
-    yellow "  preservado: $MCP_TARGET"
-  fi
+echo ""
+blue "MCPs opcionais:"
+if [[ -n "${BRAVE_API_KEY:-}" ]]; then
+  green "  BRAVE_API_KEY encontrada"
+else
+  yellow "  BRAVE_API_KEY ausente: brave-search podera falhar ate a variavel ser exportada"
+fi
+if [[ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+  green "  GITHUB_PERSONAL_ACCESS_TOKEN encontrado"
+else
+  yellow "  GITHUB_PERSONAL_ACCESS_TOKEN ausente: GitHub MCP podera falhar ate a variavel ser exportada"
 fi
 
 echo ""
