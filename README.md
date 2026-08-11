@@ -191,15 +191,62 @@ Isso reduz poluicao no seletor de agentes.
 docs/
 ├── ARCHITECTURE.md
 ├── ROUTING.md
-└── COST-STRATEGY.md
+├── COST-STRATEGY.md
+└── INSTALLATION.md
 
 opencode.json
 setup.sh
+setup.ps1
 scripts/validate.sh
 .env.example
 ```
 
-## Instalacao
+## Backup automatico obrigatorio
+
+**Todo uso de `setup.sh` ou `setup.ps1` cria um snapshot antes de qualquer alteracao**, inclusive antes de perguntar se o usuario deseja sobrescrever arquivos.
+
+Isso vale tambem para `--merge` / `-Merge` e para instalacao project-level.
+
+### Global
+
+O snapshot preserva toda a configuracao existente de:
+
+```text
+~/.config/opencode/
+```
+
+Linux/macOS/WSL:
+
+```text
+~/.config/opencode-backups/YYYYMMDD-HHMMSS-PID/
+```
+
+Windows PowerShell:
+
+```text
+$HOME\.config\opencode-backups\YYYYMMDD-HHMMSS-PID\
+```
+
+### Project-level
+
+Preserva, quando existirem:
+
+```text
+opencode.json
+opencode.jsonc
+AGENTS.md
+.opencode/
+```
+
+em:
+
+```text
+<projeto>/.opencode-backups/YYYYMMDD-HHMMSS-PID/
+```
+
+O backup nao pode ser desativado pelo instalador. Detalhes e restauracao manual em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+
+## Instalacao Linux / macOS / WSL
 
 ```bash
 git clone https://github.com/rodrigomeneguet/opencode-config.git
@@ -208,7 +255,7 @@ git checkout feat/orchestration-v2
 bash setup.sh
 ```
 
-Modos do instalador:
+Modos:
 
 ```bash
 bash setup.sh              # global interativo
@@ -218,7 +265,29 @@ bash setup.sh --symlink    # global usando symlinks
 bash setup.sh --project    # instala no projeto atual
 ```
 
-O setup tambem remove nomes legados gerenciados por este repositorio, incluindo:
+## Instalacao Windows PowerShell
+
+No PowerShell, dentro do clone:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\setup.ps1
+```
+
+Modos:
+
+```powershell
+.\setup.ps1               # global interativo
+.\setup.ps1 -Auto         # global automatico
+.\setup.ps1 -Merge        # preserva arquivos existentes
+.\setup.ps1 -Project      # instala no projeto atual
+```
+
+Para Windows com WSL, use `setup.sh` dentro da distribuicao Linux.
+
+## Limpeza de agentes legados
+
+Os instaladores removem apenas nomes legados gerenciados por este repositorio:
 
 ```text
 backend
@@ -230,18 +299,31 @@ luna-operator
 terra-lead
 ```
 
-Ele nao remove agentes customizados desconhecidos.
+Eles nao removem agentes customizados desconhecidos.
+
+Como o backup ocorre antes da limpeza, os arquivos removidos continuam disponiveis no snapshot daquela execucao.
 
 ## Variaveis de ambiente
+
+Bash:
 
 ```bash
 export BRAVE_API_KEY="..."
 export GITHUB_PERSONAL_ACCESS_TOKEN="..."
 ```
 
+PowerShell:
+
+```powershell
+$env:BRAVE_API_KEY="..."
+$env:GITHUB_PERSONAL_ACCESS_TOKEN="..."
+```
+
 Nunca versione credenciais.
 
 ## Validacao
+
+Linux/macOS/WSL:
 
 ```bash
 bash scripts/validate.sh
@@ -261,3 +343,4 @@ Depois abra o OpenCode e valide:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/ROUTING.md`](docs/ROUTING.md)
 - [`docs/COST-STRATEGY.md`](docs/COST-STRATEGY.md)
+- [`docs/INSTALLATION.md`](docs/INSTALLATION.md)
