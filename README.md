@@ -1,6 +1,8 @@
-# opencode-config
+# opencode-orchestrator
 
 Configuracao pessoal do OpenCode orientada a **otimizacao de quota**, com roteamento por **custo, risco, privacidade e tipo de dificuldade**.
+
+> Route work to the right model, at the right reasoning level, for the right cost.
 
 A ideia central e simples:
 
@@ -249,8 +251,8 @@ O backup nao pode ser desativado pelo instalador. Detalhes e restauracao manual 
 ## Instalacao Linux / macOS / WSL
 
 ```bash
-git clone https://github.com/rodrigomeneguet/opencode-config.git
-cd opencode-config
+git clone https://github.com/rodrigomeneguet/opencode-orchestrator.git
+cd opencode-orchestrator
 git checkout feat/orchestration-v2
 bash setup.sh
 ```
