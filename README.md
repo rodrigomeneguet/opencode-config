@@ -8,8 +8,8 @@ Configuracao pessoal de orquestracao para OpenCode, otimizada para infraestrutur
 
 ```text
 Luna Operator (Medium)
-├── DeepSeek Worker (Free)    -> tarefas nao sensiveis e facilmente validaveis
-├── Luna Worker (XHigh)       -> caminho critico, codigo privado e infra sensivel
+├── DeepSeek Worker (Free)    -> capacidade elastica para alto volume
+├── Luna Worker (XHigh)       -> worker premium / caminho critico
 ├── Terra Diagnostician       -> RCA e correlacao entre camadas
 └── Strategic Advisor (Terra) -> arquitetura, seguranca, risco e rollback
 ```
@@ -23,34 +23,44 @@ Terra Lead (Medium)
 └── Strategic Advisor (Terra Medium; promovivel a Sol)
 ```
 
-A regra principal e simples: **comece no Luna e escale apenas quando a incerteza, o risco ou o tamanho da coordenacao justificar**.
+A regra principal e simples: **comece no Luna, use DeepSeek agressivamente para absorver volume e escale para Luna/Terra quando criticidade, integracao ou qualidade justificarem**.
 
 ## Agentes
 
 | Agente | Modelo | Papel |
 | --- | --- | --- |
 | `luna-operator` | GPT-5.6 Luna Medium | Primario padrao para infra e codigo |
-| `deepseek-worker` | DeepSeek V4 Flash Free | Capacidade elastica gratuita para tarefas nao sensiveis |
-| `luna-worker` | GPT-5.6 Luna XHigh | Worker de alta fidelidade para caminho critico |
+| `deepseek-worker` | DeepSeek V4 Flash Free | Capacidade elastica gratuita para exploracao, implementacao, logs, testes e revisao |
+| `luna-worker` | GPT-5.6 Luna XHigh | Worker premium para caminho critico e alta integracao |
 | `terra-diagnostician` | GPT-5.6 Terra Medium | RCA, logs e diagnostico multi-camada |
 | `terra-lead` | GPT-5.6 Terra Medium | Primario opcional para projetos grandes |
 | `strategic-advisor` | GPT-5.6 Terra Medium | Advisor somente leitura para arquitetura e risco |
 
 O advisor tem nome de papel, nao de modelo. Quando a criticidade justificar, altere apenas o frontmatter de `strategic-advisor.md` para `openai/gpt-5.6-sol` e ajuste o `reasoningEffort`.
 
-## DeepSeek Free: regra de privacidade
+## DeepSeek Free: politica permissiva
 
-O DeepSeek V4 Flash Free e usado somente como worker opcional. Durante a oferta gratuita, o provedor informa que dados podem ser coletados para feedback/melhoria do modelo.
+O `deepseek-worker` deve ser usado de forma agressiva para reduzir consumo da quota OpenAI.
 
-**Nao envie ao `deepseek-worker`:**
+Repositorios privados, codigo privado, logs reais e configuracoes internas **nao sao automaticamente excluidos** do DeepSeek.
 
-- tokens, senhas, chaves ou segredos;
-- dados pessoais ou de clientes;
-- logs de producao nao sanitizados;
-- configuracoes corporativas confidenciais;
-- codigo privado sensivel ou propriedade intelectual que nao deva sair do fluxo confiavel.
+Se aparecerem credenciais ou segredos evidentes, a preferencia e mascarar ou remover somente os valores sensiveis e continuar usando o worker gratuito no restante da tarefa quando possivel.
 
-Na duvida, use `luna-worker`.
+Exemplos de bons usos:
+
+- exploracao de codebase;
+- debugging;
+- leitura e correlacao de logs;
+- revisao de configuracoes;
+- testes;
+- documentacao;
+- refatoracoes delimitadas;
+- implementacoes isoladas;
+- revisao de diff;
+- Terraform, Ansible, Docker, Kubernetes e scripts;
+- investigacoes paralelas e segunda opiniao.
+
+Para uma tarefa, projeto ou ambiente em que voce prefira manter o trabalho no ecossistema OpenAI, basta instruir `luna-operator` ou `terra-lead` a **preferir `luna-worker`**. Essa preferencia manual tem prioridade sobre o roteamento economico.
 
 ## Skills sob demanda
 
@@ -132,7 +142,7 @@ bash setup.sh --symlink    # global com symlinks para facilitar git pull
 bash setup.sh --project    # instala no projeto atual
 ```
 
-A instalacao global usa os caminhos oficiais:
+A instalacao global usa:
 
 ```text
 ~/.config/opencode/opencode.json
@@ -157,13 +167,13 @@ export BRAVE_API_KEY="..."
 export GITHUB_PERSONAL_ACCESS_TOKEN="..."
 ```
 
-O OpenCode substitui `{env:VARIAVEL}` em tempo de execucao. Sem a variavel correspondente, o MCP dependente de chave pode falhar ao iniciar, e o `setup.sh` emite um aviso.
+O OpenCode substitui `{env:VARIAVEL}` em tempo de execucao.
 
 ## Politica de roteamento
 
-1. Luna Operator investiga e tenta resolver.
-2. DeepSeek recebe apenas trabalho nao sensivel e objetivamente validavel.
-3. Luna Worker XHigh recebe caminho critico e material sensivel.
+1. Luna Operator mantem o contexto principal e resolve tarefas pequenas.
+2. DeepSeek recebe agressivamente trabalho tecnico delegavel e validavel.
+3. Luna Worker XHigh recebe caminho critico, alta integracao, fallback de qualidade ou preferencia explicita.
 4. Terra Diagnostician entra quando a causa nao e clara ou atravessa camadas.
 5. Strategic Advisor entra nos portoes de arquitetura, seguranca, blast radius e rollback.
 6. Terra Lead e selecionado manualmente quando o trabalho vira um projeto multi-frente.
@@ -176,8 +186,8 @@ Detalhes em [`docs/ROUTING.md`](docs/ROUTING.md).
 bash scripts/validate.sh
 ```
 
-O script valida JSON, agentes, skills, roteamento, ausencia de RT Mind legado, guardrails do DeepSeek, referencias de segredos via ambiente e sintaxe do setup.
+O script valida JSON, agentes, skills, roteamento, ausencia de RT Mind legado, referencias de segredos via ambiente e sintaxe do setup.
 
 ## Filosofia
 
-O objetivo nao e usar sempre o modelo mais forte. O objetivo e usar **o menor modelo que conclui a tarefa com confiabilidade**, escalando quando o custo de uma tentativa ruim passa a ser maior que o custo de um modelo melhor.
+O objetivo nao e usar sempre o modelo mais forte. O objetivo e usar **o arranjo que conclui mais trabalho correto por unidade de quota**, aproveitando a capacidade gratuita do Zen sempre que ela puder ser validada e escalando apenas quando fizer sentido.
