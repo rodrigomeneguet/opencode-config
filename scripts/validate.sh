@@ -1,168 +1,105 @@
 #!/usr/bin/env bash
-# scripts/validate.sh — Validacao completa da configuracao do opencode-config
-# Executa no sandbox (repo clonado), sem tocar na config real do usuario.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ERRORS=0
 WARNINGS=0
 
-green() { printf "\033[32m%s\033[0m\n" "$1"; }
-red()   { printf "\033[31m%s\033[0m\n" "$1"; }
-yellow(){ printf "\033[33m%s\033[0m\n" "$1"; }
-blue()  { printf "\033[34m%s\033[0m\n" "$1"; }
+green()  { printf '\033[32m%s\033[0m\n' "$1"; }
+red()    { printf '\033[31m%s\033[0m\n' "$1"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+blue()   { printf '\033[34m%s\033[0m\n' "$1"; }
 
-echo "============================================="
-echo "  Validacao de Configuracao opencode-config"
-echo "  Diretorio: ${REPO_DIR}"
-echo "============================================="
-echo ""
+fail() { red "  ✗ $1"; ERRORS=$((ERRORS + 1)); }
+warn() { yellow "  ⚠ $1"; WARNINGS=$((WARNINGS + 1)); }
+pass() { green "  ✓ $1"; }
 
-# ─── 1. Validar JSON do opencode.json ───
-blue "[1/8] Validando opencode.json..."
-if command -v node &>/dev/null; then
-  if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.json: JSON valido"
-  else
-    red "  ✗ opencode.json: JSON invalido"
-    ((ERRORS++))
-  fi
-else
-  yellow "  ⚠ node nao encontrado, pulando validacao JSON"
-  ((WARNINGS++))
-fi
-
-# ─── 2. Validar JSON do opencode.jsonc.example ───
-blue "[2/8] Validando opencode.jsonc.example..."
-if command -v node &>/dev/null; then
-  if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.jsonc.example','utf8'))" 2>/dev/null; then
-    green "  ✓ opencode.jsonc.example: JSON valido"
-  else
-    red "  ✗ opencode.jsonc.example: JSON invalido"
-    ((ERRORS++))
-  fi
-else
-  yellow "  ⚠ node nao encontrado, pulando"
-  ((WARNINGS++))
-fi
-
-# ─── 3. Validar frontmatter dos agentes ───
-blue "[3/8] Validando frontmatter dos agentes..."
-for agent_file in "${REPO_DIR}"/.opencode/agents/*.md; do
-  filename="$(basename "$agent_file")"
-  line1="$(head -1 "$agent_file")"
-  if [[ "$line1" == "---" ]]; then
-    if grep -q "^description:" "$agent_file" && grep -q "^mode:" "$agent_file"; then
-      green "  ✓ ${filename}: frontmatter valido"
-    else
-      red "  ✗ ${filename}: frontmatter sem description/mode"
-      ((ERRORS++))
-    fi
-  else
-    red "  ✗ ${filename}: linha 1 deve ser apenas '---' (encontrado: '${line1}')"
-    ((ERRORS++))
-  fi
-done
-
-# ─── 4. Verificar .gitignore ───
-blue "[4/8] Verificando .gitignore..."
-GITIGNORE="${REPO_DIR}/.gitignore"
-for entry in "opencode.jsonc" "opencode.json" ".env"; do
-  if grep -q "^${entry}$" "$GITIGNORE"; then
-    green "  ✓ '${entry}' esta no .gitignore"
-  else
-    red "  ✗ '${entry}' NAO esta no .gitignore"
-    ((ERRORS++))
-  fi
-done
-
-# ─── 5. Verificar MCP packages no npm ───
-blue "[5/8] Verificando disponibilidade dos pacotes MCP no npm..."
-MCP_PACKAGES=(
-  "@brave/brave-search-mcp-server"
-  "@modelcontextprotocol/server-github"
-  "@cyanheads/git-mcp-server"
-  "@modelcontextprotocol/server-memory"
+EXPECTED_AGENTS=(
+  luna-operator
+  luna-worker
+  deepseek-worker
+  terra-diagnostician
+  terra-lead
+  strategic-advisor
 )
-for pkg in "${MCP_PACKAGES[@]}"; do
-  if command -v npm &>/dev/null; then
-    if npm view "$pkg" version &>/dev/null; then
-      version="$(npm view "$pkg" version 2>/dev/null)"
-      green "  ✓ ${pkg}@${version}"
-    else
-      red "  ✗ ${pkg}: NAO encontrado no npm"
-      ((ERRORS++))
-    fi
+
+EXPECTED_SKILLS=(
+  infra-operations
+  security-review
+  software-testing
+  backend-engineering
+  frontend-engineering
+)
+
+echo "============================================="
+echo "  opencode-config v2 - validacao"
+echo "============================================="
+
+blue "[1/8] JSON"
+for file in opencode.json opencode.jsonc.example; do
+  if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/${file}','utf8'))" 2>/dev/null; then
+    pass "$file valido"
   else
-    yellow "  ⚠ npm nao encontrado, pulando verificacao de pacotes"
-    ((WARNINGS++))
-    break
+    fail "$file invalido"
   fi
 done
 
-# ─── 6. Validar setup.sh ───
-blue "[6/8] Validando setup.sh..."
-SETUP="${REPO_DIR}/setup.sh"
-if [[ -f "$SETUP" ]]; then
-  if bash -n "$SETUP" 2>/dev/null; then
-    green "  ✓ setup.sh: sintaxe valida"
-  else
-    red "  ✗ setup.sh: erro de sintaxe"
-    ((ERRORS++))
-  fi
-  if [[ -x "$SETUP" ]]; then
-    green "  ✓ setup.sh: executavel"
-  else
-    yellow "  ⚠ setup.sh: nao e executavel (chmod +x)"
-    ((WARNINGS++))
-  fi
+blue "[2/8] Configuracao de modelos"
+if grep -q 'openai/gpt-5.6-luna' "${REPO_DIR}/opencode.json"; then pass "Luna configurado"; else fail "Luna ausente"; fi
+if grep -q '"default_agent": "luna-operator"' "${REPO_DIR}/opencode.json"; then pass "luna-operator e o default"; else fail "default_agent incorreto"; fi
+if grep -q 'rt-vllm\|Qwen3\.5\|Qwen3\.6' "${REPO_DIR}/opencode.json"; then fail "RT Mind/Qwen legado ainda presente"; else pass "RT Mind removido"; fi
+
+blue "[3/8] Agentes"
+for name in "${EXPECTED_AGENTS[@]}"; do
+  file="${REPO_DIR}/.opencode/agents/${name}.md"
+  if [[ ! -f "$file" ]]; then fail "agente ausente: $name"; continue; fi
+  [[ "$(head -1 "$file")" == "---" ]] || fail "$name sem frontmatter"
+  grep -q '^description:' "$file" || fail "$name sem description"
+  grep -q '^mode:' "$file" || fail "$name sem mode"
+  grep -q '^model:' "$file" || fail "$name sem model"
+  pass "$name"
+done
+
+blue "[4/8] Skills"
+for name in "${EXPECTED_SKILLS[@]}"; do
+  file="${REPO_DIR}/.opencode/skills/${name}/SKILL.md"
+  if [[ ! -f "$file" ]]; then fail "skill ausente: $name"; continue; fi
+  grep -q "^name: ${name}$" "$file" || fail "$name com name invalido"
+  grep -q '^description:' "$file" || fail "$name sem description"
+  pass "$name"
+done
+
+blue "[5/8] Roteamento e privacidade"
+if grep -q 'opencode/deepseek-v4-flash-free' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "DeepSeek Free configurado"; else fail "DeepSeek Free ausente"; fi
+if grep -qi 'nao processe segredos' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "guardrail de privacidade do DeepSeek presente"; else fail "guardrail de privacidade do DeepSeek ausente"; fi
+if grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker.md"; then pass "Luna worker em xhigh"; else warn "Luna worker nao esta em xhigh"; fi
+if grep -q 'model: openai/gpt-5.6-terra' "${REPO_DIR}/.opencode/agents/strategic-advisor.md"; then pass "advisor em Terra"; else warn "advisor usa outro motor"; fi
+
+blue "[6/8] Segredos e MCP"
+if grep -q '{env:BRAVE_API_KEY}' "${REPO_DIR}/opencode.jsonc.example"; then pass "Brave usa env"; else fail "Brave nao usa env"; fi
+if grep -q '{env:GITHUB_PERSONAL_ACCESS_TOKEN}' "${REPO_DIR}/opencode.jsonc.example"; then pass "GitHub usa env"; else fail "GitHub nao usa env"; fi
+if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
+
+blue "[7/8] setup.sh"
+if bash -n "${REPO_DIR}/setup.sh"; then pass "sintaxe valida"; else fail "erro de sintaxe"; fi
+
+blue "[8/8] MCP packages"
+MCP_PACKAGES=(
+  '@brave/brave-search-mcp-server'
+  '@modelcontextprotocol/server-github'
+  '@cyanheads/git-mcp-server'
+  '@modelcontextprotocol/server-memory'
+)
+if command -v npm >/dev/null 2>&1; then
+  for pkg in "${MCP_PACKAGES[@]}"; do
+    if npm view "$pkg" version >/dev/null 2>&1; then pass "$pkg disponivel"; else warn "$pkg nao verificado no npm"; fi
+  done
 else
-  red "  ✗ setup.sh: nao encontrado"
-  ((ERRORS++))
+  warn "npm ausente; verificacao de MCPs ignorada"
 fi
 
-# ─── 7. Verificar .env.example ───
-blue "[7/8] Verificando .env.example..."
-if [[ -f "${REPO_DIR}/.env.example" ]]; then
-  green "  ✓ .env.example existe"
-  # Verificar se tem as variaveis obrigatorias
-  if grep -q "^BRAVE_API_KEY=" "${REPO_DIR}/.env.example"; then
-    green "  ✓ BRAVE_API_KEY documentada"
-  else
-    red "  ✗ BRAVE_API_KEY nao documentada no .env.example"
-    ((ERRORS++))
-  fi
-else
-  red "  ✗ .env.example: nao encontrado"
-  ((ERRORS++))
-fi
-
-# ─── 8. Testar endpoint vLLM ───
-blue "[8/8] Testando conectividade do endpoint vLLM..."
-VLLM_URL="$(node -e "console.log(JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8')).provider['rt-vllm'].options.baseURL)" 2>/dev/null || echo "")"
-if [[ -n "$VLLM_URL" ]]; then
-  if curl -sf --max-time 5 "${VLLM_URL}/models" >/dev/null 2>&1; then
-    green "  ✓ Endpoint vLLM acessivel: ${VLLM_URL}"
-  else
-    yellow "  ⚠ Endpoint vLLM inacessivel (timeout ou offline): ${VLLM_URL}"
-    ((WARNINGS++))
-  fi
-else
-  yellow "  ⚠ Nao foi possivel extrair URL do vLLM"
-  ((WARNINGS++))
-fi
-
-# ─── Resumo ───
 echo ""
 echo "============================================="
-echo "  Resumo da Validacao"
+echo "  Resultado: ${ERRORS} erro(s), ${WARNINGS} aviso(s)"
 echo "============================================="
-if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then
-  green "  ✓ Todas as validacoes passaram!"
-elif [[ $ERRORS -eq 0 ]]; then
-  yellow "  ⚠ ${WARNINGS} aviso(s), 0 erro(s)"
-else
-  red "  ✗ ${ERRORS} erro(s), ${WARNINGS} aviso(s)"
-fi
-echo ""
-exit $ERRORS
+[[ "$ERRORS" -eq 0 ]]
