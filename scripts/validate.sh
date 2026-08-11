@@ -55,13 +55,15 @@ for name in "${EXPECTED_SKILLS[@]}"; do
   pass "$name"
 done
 
-blue "[5/8] Roteamento e privacidade"
+blue "[5/8] Roteamento e politica DeepSeek"
 if grep -q 'opencode/deepseek-v4-flash-free' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "DeepSeek Free configurado"; else fail "DeepSeek Free ausente"; fi
-if grep -qi 'nao processe segredos' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "guardrail de privacidade do DeepSeek presente"; else fail "guardrail de privacidade do DeepSeek ausente"; fi
+if grep -qi 'capacidade elastica' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "DeepSeek configurado para uso agressivo"; else fail "politica de uso agressivo do DeepSeek ausente"; fi
+if grep -qi 'masque apenas\|mascar' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "tratamento seletivo de segredos presente"; else warn "regra de mascaramento seletivo nao encontrada"; fi
+if grep -qi 'preferir.*luna-worker\|prefira.*luna-worker' "${REPO_DIR}/.opencode/agents/luna-operator.md"; then pass "override manual para Luna presente"; else warn "override manual para Luna nao encontrado"; fi
 if grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker.md"; then pass "Luna worker em xhigh"; else warn "Luna worker nao esta em xhigh"; fi
 if grep -q 'model: openai/gpt-5.6-terra' "${REPO_DIR}/.opencode/agents/strategic-advisor.md"; then pass "advisor em Terra"; else warn "advisor usa outro motor"; fi
 
-blue "[6/8] Segredos"
+blue "[6/8] Segredos no repositorio"
 if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
 
 blue "[7/8] setup.sh"
