@@ -14,28 +14,29 @@ fail() { red "  ✗ $1"; ERRORS=$((ERRORS + 1)); }
 warn() { yellow "  ⚠ $1"; WARNINGS=$((WARNINGS + 1)); }
 pass() { green "  ✓ $1"; }
 
-EXPECTED_AGENTS=(luna-operator luna-worker deepseek-worker terra-diagnostician terra-lead strategic-advisor)
+EXPECTED_AGENTS=(luna-lead terra-planner luna-worker luna-worker-xhigh deepseek-worker terra-diagnostician strategic-advisor)
 EXPECTED_SKILLS=(infra-operations security-review software-testing backend-engineering frontend-engineering)
+LEGACY_AGENTS=(luna-operator terra-lead qa-engineer cybersecurity devops backend frontend)
 
 echo "============================================="
-echo "  opencode-config v2 - validacao"
+echo "  opencode-config v2.1 - validacao"
 echo "============================================="
 
-blue "[1/8] JSON"
+blue "[1/9] JSON"
 if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8'))" 2>/dev/null; then
   pass "opencode.json valido"
 else
   fail "opencode.json invalido"
 fi
 
-blue "[2/8] Configuracao de modelos e MCP"
+blue "[2/9] Configuracao global"
 if grep -q 'openai/gpt-5.6-luna' "${REPO_DIR}/opencode.json"; then pass "Luna configurado"; else fail "Luna ausente"; fi
-if grep -q '"default_agent": "luna-operator"' "${REPO_DIR}/opencode.json"; then pass "luna-operator e o default"; else fail "default_agent incorreto"; fi
+if grep -q '"default_agent": "luna-lead"' "${REPO_DIR}/opencode.json"; then pass "luna-lead e o default"; else fail "default_agent incorreto"; fi
 if grep -q 'rt-vllm\|Qwen3\.5\|Qwen3\.6' "${REPO_DIR}/opencode.json"; then fail "RT Mind/Qwen legado ainda presente"; else pass "RT Mind removido"; fi
 if grep -q '{env:BRAVE_API_KEY}' "${REPO_DIR}/opencode.json"; then pass "Brave usa env"; else fail "Brave nao usa env"; fi
 if grep -q '{env:GITHUB_PERSONAL_ACCESS_TOKEN}' "${REPO_DIR}/opencode.json"; then pass "GitHub usa env"; else fail "GitHub nao usa env"; fi
 
-blue "[3/8] Agentes"
+blue "[3/9] Agentes"
 for name in "${EXPECTED_AGENTS[@]}"; do
   file="${REPO_DIR}/.opencode/agents/${name}.md"
   if [[ ! -f "$file" ]]; then fail "agente ausente: $name"; continue; fi
@@ -46,7 +47,15 @@ for name in "${EXPECTED_AGENTS[@]}"; do
   pass "$name"
 done
 
-blue "[4/8] Skills"
+blue "[4/9] Agentes legados"
+for name in "${LEGACY_AGENTS[@]}"; do
+  if [[ -f "${REPO_DIR}/.opencode/agents/${name}.md" ]]; then
+    fail "agente legado ainda no repo: $name"
+  fi
+done
+[[ $ERRORS -eq 0 ]] && pass "nenhum agente legado no repo"
+
+blue "[5/9] Skills"
 for name in "${EXPECTED_SKILLS[@]}"; do
   file="${REPO_DIR}/.opencode/skills/${name}/SKILL.md"
   if [[ ! -f "$file" ]]; then fail "skill ausente: $name"; continue; fi
@@ -55,21 +64,31 @@ for name in "${EXPECTED_SKILLS[@]}"; do
   pass "$name"
 done
 
-blue "[5/8] Roteamento e politica DeepSeek"
-if grep -q 'opencode/deepseek-v4-flash-free' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "DeepSeek Free configurado"; else fail "DeepSeek Free ausente"; fi
-if grep -qi 'capacidade elastica' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "DeepSeek configurado para uso agressivo"; else fail "politica de uso agressivo do DeepSeek ausente"; fi
-if grep -qi 'masque apenas\|mascar' "${REPO_DIR}/.opencode/agents/deepseek-worker.md"; then pass "tratamento seletivo de segredos presente"; else warn "regra de mascaramento seletivo nao encontrada"; fi
-if grep -qi 'preferir.*luna-worker\|prefira.*luna-worker' "${REPO_DIR}/.opencode/agents/luna-operator.md"; then pass "override manual para Luna presente"; else warn "override manual para Luna nao encontrado"; fi
-if grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker.md"; then pass "Luna worker em xhigh"; else warn "Luna worker nao esta em xhigh"; fi
-if grep -q 'model: openai/gpt-5.6-terra' "${REPO_DIR}/.opencode/agents/strategic-advisor.md"; then pass "advisor em Terra"; else warn "advisor usa outro motor"; fi
+blue "[6/9] Roteamento de modelos"
+grep -q 'reasoningEffort: medium' "${REPO_DIR}/.opencode/agents/luna-lead.md" && pass "Luna Lead em Medium" || fail "Luna Lead nao esta em Medium"
+grep -q 'reasoningEffort: high' "${REPO_DIR}/.opencode/agents/luna-worker.md" && pass "Luna Worker em High" || fail "Luna Worker nao esta em High"
+grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker-xhigh.md" && pass "Luna XHigh configurado" || fail "Luna XHigh ausente"
+grep -q '^hidden: true' "${REPO_DIR}/.opencode/agents/luna-worker-xhigh.md" && pass "Luna XHigh oculto" || warn "Luna XHigh nao esta oculto"
+grep -q 'reasoningEffort: low' "${REPO_DIR}/.opencode/agents/terra-diagnostician.md" && pass "Terra Diagnostician em Low" || fail "Terra Diagnostician nao esta em Low"
+grep -q 'reasoningEffort: low' "${REPO_DIR}/.opencode/agents/terra-planner.md" && pass "Terra Planner em Low" || fail "Terra Planner nao esta em Low"
+grep -q 'reasoningEffort: medium' "${REPO_DIR}/.opencode/agents/strategic-advisor.md" && pass "Strategic Advisor em Medium" || warn "Strategic Advisor nao esta em Medium"
+grep -q 'opencode/deepseek-v4-flash-free' "${REPO_DIR}/.opencode/agents/deepseek-worker.md" && pass "DeepSeek Free configurado" || fail "DeepSeek Free ausente"
 
-blue "[6/8] Segredos no repositorio"
+blue "[7/9] Roteamento do Luna Lead"
+for target in deepseek-worker luna-worker luna-worker-xhigh terra-diagnostician terra-planner strategic-advisor; do
+  if grep -q "\"${target}\": allow" "${REPO_DIR}/.opencode/agents/luna-lead.md"; then
+    pass "Luna Lead pode chamar ${target}"
+  else
+    fail "Luna Lead nao pode chamar ${target}"
+  fi
+done
+
+blue "[8/9] Segredos e setup"
 if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
+if bash -n "${REPO_DIR}/setup.sh"; then pass "setup.sh com sintaxe valida"; else fail "setup.sh com erro de sintaxe"; fi
+if grep -q 'luna-operator.md' "${REPO_DIR}/setup.sh" && grep -q 'terra-lead.md' "${REPO_DIR}/setup.sh"; then pass "setup limpa nomes v2 antigos"; else warn "setup pode deixar nomes v2 antigos instalados"; fi
 
-blue "[7/8] setup.sh"
-if bash -n "${REPO_DIR}/setup.sh"; then pass "sintaxe valida"; else fail "erro de sintaxe"; fi
-
-blue "[8/8] MCP packages"
+blue "[9/9] MCP packages"
 MCP_PACKAGES=('@brave/brave-search-mcp-server' '@modelcontextprotocol/server-github' '@cyanheads/git-mcp-server' '@modelcontextprotocol/server-memory')
 if command -v npm >/dev/null 2>&1; then
   for pkg in "${MCP_PACKAGES[@]}"; do
