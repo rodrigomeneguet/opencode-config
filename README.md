@@ -54,7 +54,7 @@ Na duvida, use `luna-worker`.
 
 ## Skills sob demanda
 
-Os antigos agentes de papel fixo foram removidos. Em vez de manter `devops`, `backend`, `frontend`, `qa` e `cybersecurity` como agentes permanentes, o conhecimento especializado fica em skills carregadas apenas quando necessario:
+Os antigos agentes de papel fixo foram removidos. Em vez de manter `devops`, `backend`, `frontend`, `qa` e `cybersecurity` como agentes permanentes, o conhecimento especializado fica em skills carregadas quando necessario:
 
 - `infra-operations`
 - `security-review`
@@ -69,7 +69,6 @@ Isso reduz poluicao no menu de agentes e separa **responsabilidade de orquestrac
 ```text
 opencode-config/
 ├── opencode.json
-├── opencode.jsonc.example
 ├── setup.sh
 ├── .env.example
 ├── .opencode/
@@ -137,7 +136,6 @@ A instalacao global usa os caminhos oficiais:
 
 ```text
 ~/.config/opencode/opencode.json
-~/.config/opencode/opencode.jsonc
 ~/.config/opencode/agents/
 ~/.config/opencode/skills/
 ```
@@ -146,32 +144,22 @@ O modo `--project` usa:
 
 ```text
 ./opencode.json
-./opencode.jsonc
 ./.opencode/agents/
 ./.opencode/skills/
 ```
 
-## MCPs
+## MCPs e segredos
 
-O template inclui:
-
-- Brave Search;
-- GitHub;
-- Git History;
-- Memory Graph.
-
-As credenciais nao sao gravadas no repositorio. `opencode.jsonc.example` referencia variaveis de ambiente:
+Brave Search, GitHub, Git History e Memory Graph ficam no mesmo `opencode.json` principal. As credenciais sao referenciadas por variaveis de ambiente e nao ficam gravadas no repositorio:
 
 ```bash
 export BRAVE_API_KEY="..."
 export GITHUB_PERSONAL_ACCESS_TOKEN="..."
 ```
 
-Sem a variavel correspondente, o `setup.sh` desabilita o MCP dependente de chave na configuracao gerada.
+O OpenCode substitui `{env:VARIAVEL}` em tempo de execucao. Sem a variavel correspondente, o MCP dependente de chave pode falhar ao iniciar, e o `setup.sh` emite um aviso.
 
 ## Politica de roteamento
-
-Use o fluxo padrao para a maioria das tarefas:
 
 1. Luna Operator investiga e tenta resolver.
 2. DeepSeek recebe apenas trabalho nao sensivel e objetivamente validavel.
