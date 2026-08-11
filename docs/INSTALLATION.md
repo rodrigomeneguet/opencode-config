@@ -66,8 +66,8 @@ O snapshot fica em:
 O OpenCode recomenda WSL para a melhor experiencia no Windows. Nesse caso use o instalador Bash normalmente.
 
 ```bash
-git clone https://github.com/rodrigomeneguet/opencode-config.git
-cd opencode-config
+git clone https://github.com/rodrigomeneguet/opencode-orchestrator.git
+cd opencode-orchestrator
 git checkout feat/orchestration-v2
 bash setup.sh
 ```
