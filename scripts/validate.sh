@@ -22,21 +22,21 @@ echo "============================================="
 echo "  opencode-config v2.1 - validacao"
 echo "============================================="
 
-blue "[1/9] JSON"
+blue "[1/10] JSON"
 if node -e "JSON.parse(require('fs').readFileSync('${REPO_DIR}/opencode.json','utf8'))" 2>/dev/null; then
   pass "opencode.json valido"
 else
   fail "opencode.json invalido"
 fi
 
-blue "[2/9] Configuracao global"
+blue "[2/10] Configuracao global"
 if grep -q 'openai/gpt-5.6-luna' "${REPO_DIR}/opencode.json"; then pass "Luna configurado"; else fail "Luna ausente"; fi
 if grep -q '"default_agent": "luna-lead"' "${REPO_DIR}/opencode.json"; then pass "luna-lead e o default"; else fail "default_agent incorreto"; fi
 if grep -q 'rt-vllm\|Qwen3\.5\|Qwen3\.6' "${REPO_DIR}/opencode.json"; then fail "RT Mind/Qwen legado ainda presente"; else pass "RT Mind removido"; fi
 if grep -q '{env:BRAVE_API_KEY}' "${REPO_DIR}/opencode.json"; then pass "Brave usa env"; else fail "Brave nao usa env"; fi
 if grep -q '{env:GITHUB_PERSONAL_ACCESS_TOKEN}' "${REPO_DIR}/opencode.json"; then pass "GitHub usa env"; else fail "GitHub nao usa env"; fi
 
-blue "[3/9] Agentes"
+blue "[3/10] Agentes"
 for name in "${EXPECTED_AGENTS[@]}"; do
   file="${REPO_DIR}/.opencode/agents/${name}.md"
   if [[ ! -f "$file" ]]; then fail "agente ausente: $name"; continue; fi
@@ -47,15 +47,17 @@ for name in "${EXPECTED_AGENTS[@]}"; do
   pass "$name"
 done
 
-blue "[4/9] Agentes legados"
+blue "[4/10] Agentes legados"
+legacy_found=0
 for name in "${LEGACY_AGENTS[@]}"; do
   if [[ -f "${REPO_DIR}/.opencode/agents/${name}.md" ]]; then
     fail "agente legado ainda no repo: $name"
+    legacy_found=1
   fi
 done
-[[ $ERRORS -eq 0 ]] && pass "nenhum agente legado no repo"
+[[ $legacy_found -eq 0 ]] && pass "nenhum agente legado no repo"
 
-blue "[5/9] Skills"
+blue "[5/10] Skills"
 for name in "${EXPECTED_SKILLS[@]}"; do
   file="${REPO_DIR}/.opencode/skills/${name}/SKILL.md"
   if [[ ! -f "$file" ]]; then fail "skill ausente: $name"; continue; fi
@@ -64,7 +66,7 @@ for name in "${EXPECTED_SKILLS[@]}"; do
   pass "$name"
 done
 
-blue "[6/9] Roteamento de modelos"
+blue "[6/10] Roteamento de modelos"
 grep -q 'reasoningEffort: medium' "${REPO_DIR}/.opencode/agents/luna-lead.md" && pass "Luna Lead em Medium" || fail "Luna Lead nao esta em Medium"
 grep -q 'reasoningEffort: high' "${REPO_DIR}/.opencode/agents/luna-worker.md" && pass "Luna Worker em High" || fail "Luna Worker nao esta em High"
 grep -q 'reasoningEffort: xhigh' "${REPO_DIR}/.opencode/agents/luna-worker-xhigh.md" && pass "Luna XHigh configurado" || fail "Luna XHigh ausente"
@@ -74,7 +76,7 @@ grep -q 'reasoningEffort: low' "${REPO_DIR}/.opencode/agents/terra-planner.md" &
 grep -q 'reasoningEffort: medium' "${REPO_DIR}/.opencode/agents/strategic-advisor.md" && pass "Strategic Advisor em Medium" || warn "Strategic Advisor nao esta em Medium"
 grep -q 'opencode/deepseek-v4-flash-free' "${REPO_DIR}/.opencode/agents/deepseek-worker.md" && pass "DeepSeek Free configurado" || fail "DeepSeek Free ausente"
 
-blue "[7/9] Roteamento do Luna Lead"
+blue "[7/10] Roteamento do Luna Lead"
 for target in deepseek-worker luna-worker luna-worker-xhigh terra-diagnostician terra-planner strategic-advisor; do
   if grep -q "\"${target}\": allow" "${REPO_DIR}/.opencode/agents/luna-lead.md"; then
     pass "Luna Lead pode chamar ${target}"
@@ -83,12 +85,32 @@ for target in deepseek-worker luna-worker luna-worker-xhigh terra-diagnostician 
   fi
 done
 
-blue "[8/9] Segredos e setup"
-if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
+blue "[8/10] Instaladores e backups"
 if bash -n "${REPO_DIR}/setup.sh"; then pass "setup.sh com sintaxe valida"; else fail "setup.sh com erro de sintaxe"; fi
-if grep -q 'luna-operator.md' "${REPO_DIR}/setup.sh" && grep -q 'terra-lead.md' "${REPO_DIR}/setup.sh"; then pass "setup limpa nomes v2 antigos"; else warn "setup pode deixar nomes v2 antigos instalados"; fi
+[[ -f "${REPO_DIR}/setup.ps1" ]] && pass "setup.ps1 presente" || fail "setup.ps1 ausente"
 
-blue "[9/9] MCP packages"
+grep -q 'backup_current_config' "${REPO_DIR}/setup.sh" && pass "Unix cria snapshot pre-instalacao" || fail "backup obrigatorio ausente no setup.sh"
+grep -q 'opencode-backups' "${REPO_DIR}/setup.sh" && pass "Unix usa diretorio de backups dedicado" || fail "diretorio de backup Unix ausente"
+grep -q 'New-ConfigBackup' "${REPO_DIR}/setup.ps1" && pass "Windows cria snapshot pre-instalacao" || fail "backup obrigatorio ausente no setup.ps1"
+grep -q 'opencode-backups' "${REPO_DIR}/setup.ps1" && pass "Windows usa diretorio de backups dedicado" || fail "diretorio de backup Windows ausente"
+
+grep -q 'luna-operator.md' "${REPO_DIR}/setup.sh" && grep -q 'terra-lead.md' "${REPO_DIR}/setup.sh" && pass "setup.sh limpa nomes v2 antigos" || warn "setup.sh pode deixar nomes v2 antigos"
+grep -q "'luna-operator.md'" "${REPO_DIR}/setup.ps1" && grep -q "'terra-lead.md'" "${REPO_DIR}/setup.ps1" && pass "setup.ps1 limpa nomes v2 antigos" || warn "setup.ps1 pode deixar nomes v2 antigos"
+
+if command -v pwsh >/dev/null 2>&1; then
+  if pwsh -NoProfile -Command '$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($args[0],[ref]$tokens,[ref]$errors) | Out-Null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }' "${REPO_DIR}/setup.ps1" >/dev/null 2>&1; then
+    pass "setup.ps1 com sintaxe valida"
+  else
+    fail "setup.ps1 com erro de sintaxe"
+  fi
+else
+  warn "pwsh ausente; parser do setup.ps1 nao executado neste host"
+fi
+
+blue "[9/10] Segredos"
+if grep -RIEq '(ghp_[A-Za-z0-9]{20,}|BSA[A-Za-z0-9]{20,})' "${REPO_DIR}" --exclude-dir=.git; then fail "possivel credencial literal encontrada"; else pass "nenhuma credencial conhecida encontrada"; fi
+
+blue "[10/10] MCP packages"
 MCP_PACKAGES=('@brave/brave-search-mcp-server' '@modelcontextprotocol/server-github' '@cyanheads/git-mcp-server' '@modelcontextprotocol/server-memory')
 if command -v npm >/dev/null 2>&1; then
   for pkg in "${MCP_PACKAGES[@]}"; do
