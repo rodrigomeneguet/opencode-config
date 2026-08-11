@@ -70,15 +70,52 @@ install_tree() {
   done < <(find "$src_dir" -type f -print0)
 }
 
+# Remove apenas agentes legados que eram gerenciados por este repositorio.
+# Nao remove agentes customizados desconhecidos do usuario.
+cleanup_legacy_agents() {
+  local target_dir="$1"
+  local removed=0
+  local legacy_agents=(
+    "qa-engineer.md"
+    "cybersecurity.md"
+    "devops.md"
+    "backend.md"
+    "frontend.md"
+  )
+
+  [[ -d "$target_dir" ]] || return 0
+
+  for filename in "${legacy_agents[@]}"; do
+    if [[ -e "${target_dir}/${filename}" || -L "${target_dir}/${filename}" ]]; then
+      rm -f "${target_dir}/${filename}"
+      yellow "  removido agente legado: ${target_dir}/${filename}"
+      removed=$((removed + 1))
+    fi
+  done
+
+  if [[ $removed -gt 0 ]]; then
+    green "  limpeza concluida: ${removed} agente(s) legado(s) removido(s)"
+  fi
+}
+
 if [[ "$MODE" == "project" ]]; then
   ROOT="$(pwd)"
   blue "Instalacao project-level em ${ROOT}"
+  cleanup_legacy_agents "${ROOT}/.opencode/agents"
   install_file "${REPO_DIR}/opencode.json" "${ROOT}/opencode.json"
   install_tree "${REPO_DIR}/.opencode/agents" "${ROOT}/.opencode/agents"
   install_tree "${REPO_DIR}/.opencode/skills" "${ROOT}/.opencode/skills"
 else
   blue "Instalacao global em ${GLOBAL_DIR}"
   mkdir -p "$GLOBAL_DIR"
+
+  # Caminho global atual.
+  cleanup_legacy_agents "${GLOBAL_DIR}/agents"
+
+  # Compatibilidade com a estrutura usada pela versao antiga deste repo.
+  # O setup anterior gravava agentes em ~/.config/opencode/.opencode/agents.
+  cleanup_legacy_agents "${GLOBAL_DIR}/.opencode/agents"
+
   install_file "${REPO_DIR}/opencode.json" "${GLOBAL_DIR}/opencode.json"
   install_tree "${REPO_DIR}/.opencode/agents" "${GLOBAL_DIR}/agents"
   install_tree "${REPO_DIR}/.opencode/skills" "${GLOBAL_DIR}/skills"
@@ -112,5 +149,17 @@ echo "  openai/gpt-5.6-luna"
 echo "  openai/gpt-5.6-terra"
 echo "  opencode/deepseek-v4-flash-free"
 echo ""
-echo "Confirme com: opencode models"
+echo "Agentes esperados:"
+echo "  luna-operator"
+echo "  luna-worker"
+echo "  deepseek-worker"
+echo "  terra-diagnostician"
+echo "  terra-lead"
+echo "  strategic-advisor"
+echo ""
+echo "Se algum agente legado ainda aparecer, procure arquivos residuais com:"
+echo "  find ~/.config/opencode -type f -path '*/agents/*.md' -print"
+echo "  find . -maxdepth 3 -type f -path '*/.opencode/agents/*.md' -print"
+echo ""
+echo "Confirme modelos com: opencode models"
 echo "Autenticacao: use 'opencode auth login' para OpenAI/OpenCode Zen quando necessario."
