@@ -28,6 +28,10 @@ Luna Lead Medium
    ├─ simples/pequeno ───────────────→ resolve diretamente
    │
    ├─ barato/validavel ──────────────→ DeepSeek Free
+   │                                      │
+   │                                      └─ provider/quota indisponivel
+   │                                             ↓
+   │                                          Luna High
    │
    ├─ execucao premium ──────────────→ Luna High
    │                                      │
@@ -53,6 +57,38 @@ Use Luna quando:
 - a fidelidade ao contexto for importante;
 - houver maior sensibilidade de dados;
 - a qualidade do DeepSeek tiver sido insuficiente.
+
+### Falha terminal do DeepSeek
+
+DeepSeek e capacidade auxiliar e nao deve bloquear a entrega principal.
+
+Quando o `deepseek-worker` devolver uma falha terminal de provider, como:
+
+- `Free usage exceeded` / quota esgotada;
+- autenticacao invalida;
+- modelo indisponivel;
+- provider indisponivel;
+
+O Luna Lead deve:
+
+1. evitar novas chamadas ao DeepSeek na mesma sessao;
+2. encaminhar a subtarefa para `luna-worker` High;
+3. preservar independencia quando a subtarefa era uma revisao separada;
+4. registrar o fallback no relatorio final.
+
+Para timeout, rate limit temporario ou sobrecarga transitoria que retornem controle ao Lead, no maximo uma nova tentativa e depois fallback para Luna High.
+
+Erros da propria tarefa, como teste falhando, erro de compilacao ou problema logico, nao sao falhas de provider e devem ser diagnosticados normalmente.
+
+### Limitacao conhecida do OpenCode
+
+Essa politica de fallback depende de o controle retornar ao agente pai. Ha relatos no OpenCode de `SessionRetry` sem teto de tentativas e de subagents/tasks sem timeout de alto nivel. Em uma task presa em retries internos, o Luna Lead pode nao receber o erro a tempo de executar o fallback; nesse caso o cancelamento manual pode continuar necessario ate que o OpenCode ofereca failover/timeout nativo.
+
+Referencias upstream:
+
+- `anomalyco/opencode#21960` — SessionRetry pode repetir indefinidamente;
+- `anomalyco/opencode#7602` — pedido aberto para fallback/failover nativo entre modelos;
+- `anomalyco/opencode#20096` — tasks podem ficar bloqueadas sem timeout de alto nivel.
 
 ## Luna High vs Luna XHigh
 
