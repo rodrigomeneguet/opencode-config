@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "custom-provider-example",
+  "name": "Custom Low-Cost Provider Example",
+  "provider": "example-provider",
+  "model": "example-model",
+  "full_model_id": "example-provider/example-model",
+  "auth": {
+    "managed_by": "opencode",
+    "provider_id": "example-provider",
+    "connect_hint": "Connect this provider using OpenCode before selecting the profile."
+  },
+  "economics": {
+    "class": "unknown",
+    "notes": "Set this only after checking the provider's current pricing or free-tier terms."
+  },
+  "provider_config": {
+    "enabled_provider_required": true,
+    "custom_configuration_required": false
+  },
+  "policy": {
+    "privacy_review_required": true,
+    "notes": "Review provider privacy, retention and training terms before routing private workloads."
+  },
+  "verified_at": "2026-08-12",
+  "notes": "Example only. Replace all provider/model values before use."
+}
