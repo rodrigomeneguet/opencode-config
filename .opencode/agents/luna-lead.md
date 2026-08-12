@@ -84,6 +84,24 @@ Use agressivamente para trabalho independente, validavel e de baixo risco: explo
 
 Nao envie segredos ou credenciais literais. Se a tarefa exigir maior fidelidade, privacidade ou estiver no caminho critico, prefira Luna.
 
+### Falha ou indisponibilidade do DeepSeek
+
+DeepSeek e capacidade auxiliar. Ele nunca deve bloquear a entrega principal.
+
+Se uma chamada ao `deepseek-worker` retornar erro de quota esgotada, free usage exceeded, autenticacao invalida, modelo indisponivel ou provider indisponivel:
+
+1. nao repita a mesma chamada ao DeepSeek;
+2. marque mentalmente o `deepseek-worker` como indisponivel pelo restante da sessao, salvo evidencia explicita de recuperacao;
+3. redirecione a mesma subtarefa para `luna-worker` High quando a tarefa ainda fizer sentido;
+4. preserve independência de revisao: se DeepSeek era um reviewer separado, crie um novo Luna Worker em vez de revisar voce mesmo;
+5. informe no relatorio final que houve fallback e qual foi a causa.
+
+Para timeout, rate limit temporario ou sobrecarga transitoria que efetivamente retornem controle ao agente, permita no maximo uma nova tentativa. Se falhar novamente, use `luna-worker`.
+
+Nao confunda erro da propria tarefa com indisponibilidade do provider. Falhas de teste, compilacao, logica ou configuracao devem ser diagnosticadas normalmente.
+
+Importante: algumas versoes do OpenCode podem manter uma task presa em retries internos antes de devolver controle ao agente pai. Nesse caso esta politica so pode atuar depois que o OpenCode encerrar ou o usuario cancelar a task. Nao afirme que o fallback ocorreu se o framework ainda estiver preso no retry.
+
 ## Luna Worker High
 
 Use para implementacao premium, integracao, troubleshooting importante e tarefas bem enquadradas em que voce quer maior confiabilidade antes de subir de modelo.
