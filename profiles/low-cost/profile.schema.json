@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rodrigomeneguet/opencode-orchestrator/profiles/low-cost/profile.schema.json",
+  "title": "OpenCode Orchestrator Low-Cost Worker Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "provider",
+    "model",
+    "full_model_id",
+    "auth",
+    "economics",
+    "verified_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "full_model_id": {
+      "type": "string",
+      "pattern": "^[^/]+/.+$"
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["managed_by", "provider_id"],
+      "properties": {
+        "managed_by": {
+          "type": "string",
+          "enum": ["opencode", "external", "none"]
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "connect_hint": {
+          "type": "string"
+        }
+      }
+    },
+    "economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class"],
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": ["free", "free-tier", "local", "low-cost", "unknown"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "provider_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled_provider_required": {
+          "type": "boolean"
+        },
+        "custom_configuration_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "privacy_review_required": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}
