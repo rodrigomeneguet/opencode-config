@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "opencode-deepseek-v4-flash-free",
+  "name": "OpenCode DeepSeek V4 Flash Free",
+  "provider": "opencode",
+  "model": "deepseek-v4-flash-free",
+  "full_model_id": "opencode/deepseek-v4-flash-free",
+  "auth": {
+    "managed_by": "opencode",
+    "provider_id": "opencode",
+    "connect_hint": "/connect or opencode auth login"
+  },
+  "economics": {
+    "class": "free-tier",
+    "notes": "Availability and quota are provider-controlled and may change. Free usage exhaustion has been observed in real runs."
+  },
+  "provider_config": {
+    "enabled_provider_required": true,
+    "custom_configuration_required": false
+  },
+  "policy": {
+    "privacy_review_required": true,
+    "notes": "Provider-specific privacy and retention terms must be reviewed separately from generic Low-Cost Worker routing policy."
+  },
+  "verified_at": "2026-08-12",
+  "notes": "Current backend used by the master branch deepseek-worker. This profile does not guarantee free-tier availability."
+}
