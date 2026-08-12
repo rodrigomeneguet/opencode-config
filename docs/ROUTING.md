@@ -122,3 +122,15 @@ Recomendacao preliminar
 ```
 
 Isso reduz contexto caro e melhora a qualidade da consulta.
+
+## Hipoteses em observacao
+
+Nem toda ideia util deve virar regra imediatamente. O projeto registra hipoteses de roteamento em `docs/decisions/` e exige evidencia antes de alterar prompts ou politicas.
+
+A primeira hipotese em observacao e **context continuity**: em tarefas fortemente acopladas, manter um worker que ja acumulou contexto pode evitar custo de reconstrucao e risco de integracao. Isso **ainda nao e uma regra ativa**.
+
+Consulte:
+
+- [`ADR-0001: Context continuity in worker routing`](decisions/ADR-0001-context-continuity-routing.md)
+
+O ADR define perguntas, sinais candidatos, criterios de aceitacao/rejeicao e um log de evidencias para decidir futuramente se a continuidade de contexto merece entrar no roteamento explicito.
