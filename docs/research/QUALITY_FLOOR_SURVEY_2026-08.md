@@ -67,6 +67,36 @@ Sources:
 - https://api-docs.deepseek.com/quick_start/pricing/
 - https://api-docs.deepseek.com/api/list-models
 
+## Strategic finding: the fallback does not have to be free
+
+The worker role exists to protect premium OpenAI quota while retaining enough quality to perform useful engineering work. That means `free` should not be a hard architectural requirement.
+
+The official DeepSeek API currently provides the exact V4 Flash model at extremely low pay-as-you-go pricing:
+
+| Usage | Price / 1M tokens |
+| --- | ---: |
+| Input, cache hit | $0.0028 |
+| Input, cache miss | $0.14 |
+| Output | $0.28 |
+
+This creates a special backend class for the orchestrator:
+
+```text
+OpenCode Zen / DeepSeek V4 Flash Free
+              |
+              | quota/promotion unavailable
+              v
+Direct DeepSeek API / DeepSeek V4 Flash
+              |
+              | same model family and quality class
+              v
+continue without capability downgrade
+```
+
+This is not proposed as the default paid path and requires explicit user configuration/balance. It is important architecturally because a deterministic same-model `payg-cheap` fallback may be preferable to an automatic switch to a materially weaker free model.
+
+The profile design should therefore optimize for **economic capacity**, not strictly `free capacity`.
+
 ## Important benchmark caveat
 
 Cross-vendor benchmark numbers are not automatically comparable. Providers may use different:
@@ -118,21 +148,21 @@ This makes the economics `free-recurring` at the time of this survey, but with a
 
 ### OpenCode integration
 
-OpenCode currently bundles `@ai-sdk/google` and OpenCode Zen itself exposes Gemini 3.6 Flash through that SDK. The public OpenCode provider guide documents Google Vertex AI explicitly but does not currently provide a first-class walkthrough for the Gemini Developer API free tier.
+OpenCode supports 75+ providers through the AI SDK and allows custom providers, but its public provider guide currently documents Google Vertex AI rather than a dedicated Gemini Developer API free-tier walkthrough.
 
 Therefore the direct Google free-tier path must be validated live before a preset is shipped:
 
 1. authenticate without the orchestrator storing credentials;
-2. confirm `google/gemini-3.6-flash` or the actual current provider/model ID shown by `/models`;
+2. confirm the actual provider/model ID shown by `/models` or configure the Google provider explicitly;
 3. validate tool streaming and multi-turn tool use;
 4. observe the real free-tier request/rate limits for the account.
 
 Sources:
 
 - https://deepmind.google/models/gemini/flash/
+- https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash
 - https://ai.google.dev/gemini-api/docs/pricing
 - https://opencode.ai/docs/providers/
-- https://opencode.ai/docs/zen/
 
 ### Research verdict
 
@@ -233,7 +263,7 @@ The official Ling pricing page currently states:
 
 The model is positioned for high-speed execution and agentic inference. However, this research pass did not find a vendor-published benchmark table directly comparable to V4 Flash, Laguna or MiMo.
 
-OpenCode currently exposes a Ling free variant in Zen, but that is a separate temporary OpenCode promotion. A direct Ling provider profile would need its own authentication/configuration path and live tool-use validation.
+OpenCode currently exposes `opencode/ling-3.0-flash-free` in Zen, but that is a separate temporary OpenCode promotion. A direct Ling provider profile would need its own authentication/configuration path and live tool-use validation.
 
 Sources:
 
@@ -243,6 +273,34 @@ Sources:
 ### Research verdict
 
 **Economically excellent, quality not yet proven against our floor.** Do not promote it to a shipped peer preset until the same OpenCode task suite passes.
+
+---
+
+## FALLBACK-CANDIDATE — North Mini Code
+
+North Mini Code is a 30B total / 3B active open-weight model from Cohere Labs with 256K context. It deserves attention because it was explicitly trained for agentic software engineering and robustness across several harnesses, including OpenCode-style typed tool use.
+
+Current model-card/evaluation artifacts report:
+
+| Benchmark | North Mini Code |
+| --- | ---: |
+| SWE-bench Verified | 67.6% |
+| SWE-bench Pro | 40.2% |
+| Terminal-Bench 2.0 | 36.0% |
+
+Cohere also reports that adding cross-harness training produced a 10% improvement on an OpenCode-harness evaluation and describes reduced malformed/repetitive tool calls after agentic RL.
+
+OpenCode currently exposes `opencode/north-mini-code-free` as a limited-time Zen free model.
+
+Sources:
+
+- https://huggingface.co/CohereLabs/North-Mini-Code-1.0
+- https://huggingface.co/blog/CohereLabs/introducing-north-mini-code
+- https://opencode.ai/docs/zen/
+
+### Research verdict
+
+**Interesting specialized fallback, not a V4-Flash peer.** Its OpenCode-oriented training may make it more useful in practice than raw parameter count suggests, but the public agentic scores remain materially below our baseline.
 
 ---
 
@@ -286,7 +344,7 @@ Unknown or stealth model identity prevents meaningful capability-floor validatio
 
 ## Revised test order
 
-The next phase should not test every free provider. It should test the models most likely to clear the V4 Flash floor.
+The next phase should not test every free provider. It should test the models most likely to clear the V4 Flash floor, then test specialized fallbacks separately.
 
 | Order | Candidate | Access path | Economics | Why test |
 | --- | --- | --- | --- | --- |
@@ -295,7 +353,9 @@ The next phase should not test every free provider. It should test the models mo
 | 2 | MiMo V2.5 Free | OpenCode Zen | `free-temporary` | Zero setup friction + strong Terminal/SWE evidence |
 | 3 | Gemini 3.6 Flash | Google Developer API | `free-recurring` | Strongest recurring-free quality candidate |
 | 4 | Ling 3.0 Flash | Direct provider | `free-recurring` daily allocation | Provider diversity; quality must be measured |
-| 5 | GPT-OSS 120B | Groq/Cerebras | `free-recurring` or trial-dependent | Lower-tier control/fallback comparison |
+| 5 | North Mini Code | OpenCode Zen | `free-temporary` | OpenCode-specific training; fallback-class control |
+| 6 | GPT-OSS 120B | Groq/Cerebras | `free-recurring` or trial-dependent | Lower-tier economic control |
+| Operational fallback | DeepSeek V4 Flash | Direct DeepSeek API | `payg-cheap` | Same-model continuity when Zen quota/promotion is unavailable |
 
 ## Same-harness validation suite
 
